@@ -1,0 +1,15 @@
+version: '3.9'
+
+services:
+  emu24_schema:
+    build:
+      context: .
+      dockerfile: dockerfile
+    container_name: emu24_schema
+    stdin_open: true
+    tty: true
+    network_mode: host
+    volumes:
+      - ./:/app
+    
+
