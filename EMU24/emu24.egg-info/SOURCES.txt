@@ -1,7 +1,0 @@
-setup.py
-emu24/EMU24.py
-emu24/__init__.py
-emu24.egg-info/PKG-INFO
-emu24.egg-info/SOURCES.txt
-emu24.egg-info/dependency_links.txt
-emu24.egg-info/top_level.txt
