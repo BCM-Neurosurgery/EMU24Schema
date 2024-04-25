@@ -11,21 +11,6 @@ from pyNsXStitch.stitchers import StitchedNeVFile, StitchedNsXFile
 from pyNsXStitch.helpers import get_all_nev_comments
 
 
-# Add external stores
-dj.config['stores'] = {
-    'Ext_Chunk': {
-        'protocol': 'file',
-        'location': '/app/Data/EMU24/Ext_Chunk',
-        'stage': '/app/Data/EMU24/Ext_Chunk',
-    },
-    'Ext_Stitch': {
-        'protocol': 'file',
-        'location': '/app/Data/EMU24/Ext_Stitch',
-        'stage': '/app/Data/EMU24/Ext_Stitch',
-    }
-}
-
-
 # Define the schema
 schema = dj.schema('paulsteffan_EMU24')
 
