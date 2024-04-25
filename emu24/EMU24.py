@@ -11,13 +11,6 @@ from pyNsXStitch.stitchers import StitchedNeVFile, StitchedNsXFile
 from pyNsXStitch.helpers import get_all_nev_comments
 
 
-# Connect to the database
-dj.config['database.host'] = 'localhost'
-dj.config['database.user'] = 'paulsteffan'
-dj.config['database.password'] = 'paulsteffan#1'
-dj.config['database.port'] = 3306  # optional, default is 3306 for MySQL
-dj.config['database.reconnect'] = True
-
 # Add external stores
 dj.config['stores'] = {
     'Ext_Chunk': {
