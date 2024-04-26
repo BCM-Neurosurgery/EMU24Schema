@@ -21,21 +21,22 @@ class Patient(dj.Manual):
     patient_id: int  # primary key
     ---
     dob: varchar(256) # secondary attribute
+    emu_id: varchar(256)
     """
 
 @schema
-class Admission(dj.Manual):
+class Recording(dj.Manual):
     definition = """
     -> Patient
-    admission_id: int  # primary key
+    recording_id: int  # primary key
     ---
-    admission_date: varchar(256)  # secondary attribute
+    recording_name: varchar(256) # secondary attribute
     """
 
 @schema
 class TOCInstance(dj.Manual):
     definition = """
-    -> Admission
+    -> Recording
     toc_id: int
     ---
     base_file: varchar(256)  # secondary attribute
@@ -94,7 +95,7 @@ class NSPChunks(dj.Computed):
 
         key_dict = (source & key).fetch1()
 
-        #Get the file name 
+        #Get the file name
         nev_file = key_dict['nev_file']
         key['file'] = nev_file[:-4]
 
@@ -128,12 +129,12 @@ class TaskComments(dj.Computed):
     timestamp: int 
     comment_type: varchar(256)  
     """
-    
+
     def make(self,key):
 
         max_id = len(TaskComments())
         # Get the file name
-        
+
         file = (NSPChunks & key).fetch1('nev_file')
         DF = get_all_nev_comments([file])
         #Get all comments from the NEV file
@@ -146,30 +147,30 @@ class TaskComments(dj.Computed):
             if '$TASKID' in row['Data']:
                 key['task_comment'] = row['Data']
                 key['comment_type'] = 'TASKID'
-            elif '$TASKSTART' in row['Data']: 
+            elif '$TASKSTART' in row['Data']:
                 key['task_comment'] = row['Data']
                 key['comment_type'] = 'START'
-            elif '$TASKSTOP' in row['Data']: 
+            elif '$TASKSTOP' in row['Data']:
                 key['task_comment'] = row['Data']
                 key['comment_type'] = 'STOP'
-            elif '$TASKKILL' in row['Data']: 
+            elif '$TASKKILL' in row['Data']:
                 key['task_comment'] = row['Data']
                 key['comment_type'] = 'KILL'
-            elif '$TASKERROR' in row['Data']: 
+            elif '$TASKERROR' in row['Data']:
                 key['task_comment'] = row['Data']
                 key['comment_type'] = 'ERROR'
-            elif '$TASKMETA' in row['Data']: 
+            elif '$TASKMETA' in row['Data']:
                 key['task_comment'] = row['Data']
                 key['comment_type'] = 'META'
             else:
                 key['task_comment'] = row['Data'] #This will throw an error if there are multiple of the same comment that are undefined
                 key['comment_type'] = 'UNDEFINED'
-            
+
             max_id = max_id + 1
             key['timestamp'] = row['TimeStamps']
             key['task_id'] = max_id
             self.insert1(key)
-        
+
 
 @schema
 class StartComments(dj.Computed):
@@ -184,7 +185,7 @@ class StartComments(dj.Computed):
     key_source = TaskComments.proj('comment_type',start_comment='task_comment',start_timestamp='timestamp') & 'comment_type = "TASKID"'
 
     def make(self,key):
-          
+
         comment, timestamp = (TaskComments.proj('comment_type',start_comment='task_comment',start_timestamp='timestamp')  &  key).fetch1('start_comment', 'start_timestamp')
         key['start_comment'] = comment
         key['start_timestamp'] = timestamp
@@ -200,13 +201,13 @@ class StartComments(dj.Computed):
             key["task_name"] = task_match.group(1)
         else:
             key["task_name"] = "UNDEFINED"
-            
+
 
         if emu_match:
             key["emu_id"] = int(emu_match.group(1),10)
-        else:    
+        else:
             key["emu_id"] = 99999
-        
+
         self.insert1(key)
 
 @schema
@@ -231,10 +232,10 @@ class StopComments(dj.Computed):
         # Extracting the matched group, which is the part of the string we want
         if emu_match:
             key["emu_id"] =int(emu_match.group(1),10)
-        else:    
+        else:
             key["emu_id"] = 99999
         self.insert1(key)
-            
+
 
 
 @schema
@@ -256,7 +257,7 @@ class StitchedChunks(dj.Computed):
         source = StartComments.proj('start_comment','start_timestamp',start_fid='file_id',start_tid='task_id') * StopComments.proj('stop_comment','stop_timestamp',stop_fid='file_id',stop_tid='task_id')
 
         start_file = (NSPChunks & ('file_id = ' + str((source & key).fetch1('start_fid')))).fetch1('file')
-        
+
         stop_file = (NSPChunks & ('file_id = '+str((source & key).fetch1('stop_fid')))).fetch1('file')
 
         # Extract last three digits from the strings
@@ -303,7 +304,7 @@ class StitchedChunks(dj.Computed):
         full_ns5_path = os.path.join('/app/Data/EMU24/Ext_Stitch', f'EMU{emu_id}-stitched.ns5')
         with open(full_ns5_path, 'wb') as f:
             stitched_ns5.write(f)
-        
+
         key['nev_file'] = full_nev_path
         key['ns3_file'] = full_ns3_path
         key['ns5_file'] = full_ns5_path
