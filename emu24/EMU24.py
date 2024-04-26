@@ -25,18 +25,18 @@ class Patient(dj.Manual):
     """
 
 @schema
-class Recording(dj.Manual):
+class Admission(dj.Manual):
     definition = """
     -> Patient
-    recording_id: int  # primary key
+    admission_id: int  # primary key
     ---
-    recording_name: varchar(256) # secondary attribute
+    admission_date: varchar(256)  # secondary attribute
     """
 
 @schema
 class TOCInstance(dj.Manual):
     definition = """
-    -> Recording
+    -> Admission
     toc_id: int
     ---
     base_file: varchar(256)  # secondary attribute
