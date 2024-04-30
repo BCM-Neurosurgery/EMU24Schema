@@ -13,12 +13,11 @@ def make_admission(patient_pk):
     print('What date is the start of the admission?')
     date = input(" > ")
 
-    emu24.Admission.insert1({
+    emu24.Admission().insert1({
         'admission_id': new_admission_pk,
         'patient_id': patient_pk,
         'admission_date': date
     })
-
 
 
 def make_patient():
@@ -44,7 +43,7 @@ def make_patient():
         dob = input(" > ")
 
         patient_id = len(emu24.Patient())
-        emu24.Patient.insert1({
+        emu24.Patient().insert1({
             'patient_id': patient_id,
             'emu_id': emu_id,
             'dob': dob
