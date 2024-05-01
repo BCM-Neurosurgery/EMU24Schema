@@ -1,7 +1,7 @@
 
 print('Connecting to the database...')
 
-from gen_helper import *
+from emu24.gen_helper import *
 from emu24 import EMU24 as emu24
 
 
