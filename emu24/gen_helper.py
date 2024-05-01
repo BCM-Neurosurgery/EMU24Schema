@@ -3,7 +3,7 @@
 import datajoint as dj
 
 dj.config['database.host'] = 'localhost'
-dj.config['database.port'] = 3360
+dj.config['database.port'] = 3306
 
 dj.config['stores'] = {
     "Ext_Chunk": {
