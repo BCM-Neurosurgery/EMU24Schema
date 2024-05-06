@@ -1,18 +1,17 @@
 import datajoint as dj
 import re
 import os
-import sys
 
-
-import brpylib
 from brpylib import NsxFile
-import pyNsXStitch
 from pyNsXStitch.stitchers import StitchedNeVFile, StitchedNsXFile
 from pyNsXStitch.helpers import get_all_nev_comments
 
 
 # Define the schema
 schema = dj.schema('paulsteffan_EMU24')
+
+print('Testing updates')
+
 
 # Define the tables
 @schema
@@ -24,6 +23,7 @@ class Patient(dj.Manual):
     emu_id: varchar(256)
     """
 
+
 @schema
 class Admission(dj.Manual):
     definition = """
@@ -32,6 +32,7 @@ class Admission(dj.Manual):
     ---
     admission_date: varchar(256)  # secondary attribute
     """
+
 
 @schema
 class TOCInstance(dj.Manual):
@@ -53,6 +54,7 @@ class NEVChunks(dj.Manual):
     nev_file: filepath@Ext_Chunk
     """
 
+
 @schema
 class NS3Chunks(dj.Manual):
     definition = """
@@ -62,6 +64,7 @@ class NS3Chunks(dj.Manual):
     ---
     ns3_file: filepath@Ext_Chunk
     """
+
 
 @schema
 class NS5Chunks(dj.Manual):
@@ -90,19 +93,19 @@ class NSPChunks(dj.Computed):
     """
     key_source = NEVChunks * NS3Chunks * NS5Chunks
 
-    def make(self,key):
+    def make(self, key):
         source = NEVChunks * NS3Chunks * NS5Chunks
 
         key_dict = (source & key).fetch1()
 
-        #Get the file name
+        # Get the file name
         nev_file = key_dict['nev_file']
         key['file'] = nev_file[:-4]
 
-        #Get the chunk ID
+        # Get the chunk ID
         key['chunk_id'] = int(nev_file[-7:-4])
 
-        #Extract the absolute time
+        # Extract the absolute time
 
         ns5_fileobj = NsxFile(key_dict['ns5_file'])
 
@@ -114,8 +117,7 @@ class NSPChunks(dj.Computed):
         key['ns5_file'] = key_dict['ns5_file']
         key['ns3_file'] = key_dict['ns3_file']
 
-
-        #Insert into database
+        # Insert into database
         self.insert1(key)
 
 
@@ -130,18 +132,18 @@ class TaskComments(dj.Computed):
     comment_type: varchar(256)  
     """
 
-    def make(self,key):
+    def make(self, key):
 
         max_id = len(TaskComments())
         # Get the file name
 
         file = (NSPChunks & key).fetch1('nev_file')
-        DF = get_all_nev_comments([file])
-        #Get all comments from the NEV file
+        df = get_all_nev_comments([file])
+        # Get all comments from the NEV file
         pattern = '$TASK'
-        comments = DF['Data'].str
+        comments = df['Data'].str
         idx = comments.contains(pattern, regex=False)
-        matched_entries = DF[idx]
+        matched_entries = df[idx]
         unique_comments = matched_entries.drop_duplicates()
         for index, row in unique_comments.iterrows():
             if '$TASKID' in row['Data']:
@@ -163,7 +165,8 @@ class TaskComments(dj.Computed):
                 key['task_comment'] = row['Data']
                 key['comment_type'] = 'META'
             else:
-                key['task_comment'] = row['Data'] #This will throw an error if there are multiple of the same comment that are undefined
+                # This will throw an error if there are multiple of the same comment that are undefined
+                key['task_comment'] = row['Data']
                 key['comment_type'] = 'UNDEFINED'
 
             max_id = max_id + 1
@@ -182,9 +185,13 @@ class StartComments(dj.Computed):
     start_timestamp: int
     task_name: varchar(255)  # secondary attribute
     """
-    key_source = TaskComments.proj('comment_type',start_comment='task_comment',start_timestamp='timestamp') & 'comment_type = "TASKID"'
+    key_source = TaskComments.proj(
+        'comment_type',
+        start_comment='task_comment',
+        start_timestamp='timestamp'
+    ) & 'comment_type = "TASKID"'
 
-    def make(self,key):
+    def make(self, key):
 
         comment, timestamp = (TaskComments.proj('comment_type',start_comment='task_comment',start_timestamp='timestamp')  &  key).fetch1('start_comment', 'start_timestamp')
         key['start_comment'] = comment
@@ -202,13 +209,13 @@ class StartComments(dj.Computed):
         else:
             key["task_name"] = "UNDEFINED"
 
-
         if emu_match:
-            key["emu_id"] = int(emu_match.group(1),10)
+            key["emu_id"] = int(emu_match.group(1), 10)
         else:
             key["emu_id"] = 99999
 
         self.insert1(key)
+
 
 @schema
 class StopComments(dj.Computed):
@@ -219,9 +226,18 @@ class StopComments(dj.Computed):
     stop_comment: varchar(256)
     stop_timestamp: int
     """
-    key_source = TaskComments.proj('comment_type',stop_comment='task_comment',stop_timestamp='timestamp') & ['comment_type = "KILL"','comment_type = "STOP"'] #Add Error
-    def make(self,key):
-        comment, timestamp = (TaskComments.proj('comment_type',stop_comment='task_comment',stop_timestamp='timestamp')  &  key).fetch1('stop_comment', 'stop_timestamp')
+    key_source = TaskComments.proj(
+        'comment_type',
+        stop_comment='task_comment',
+        stop_timestamp='timestamp'
+    ) & ['comment_type = "KILL"', 'comment_type = "STOP"']  # TODO: Add Error comment as a termination
+
+    def make(self, key):
+        comment, timestamp = (TaskComments.proj(
+            'comment_type',
+            stop_comment='task_comment',
+            stop_timestamp='timestamp'
+        ) & key).fetch1('stop_comment', 'stop_timestamp')
         key['stop_comment'] = comment
         key['stop_timestamp'] = timestamp
         emu_pattern = " EMU-(.*)"
@@ -231,11 +247,10 @@ class StopComments(dj.Computed):
 
         # Extracting the matched group, which is the part of the string we want
         if emu_match:
-            key["emu_id"] =int(emu_match.group(1),10)
+            key["emu_id"] = int(emu_match.group(1), 10)
         else:
             key["emu_id"] = 99999
         self.insert1(key)
-
 
 
 @schema
@@ -250,14 +265,33 @@ class StitchedChunks(dj.Computed):
     ns3_file: filepath@Ext_Stitch
     ns5_file: filepath@Ext_Stitch
     """
-    key_source = StartComments.proj('start_comment','start_timestamp',start_fid='file_id',start_tid='task_id') * StopComments.proj('stop_comment','stop_timestamp',stop_fid='file_id',stop_tid='task_id')
+    key_source = StartComments.proj(
+        'start_comment',
+        'start_timestamp',
+        start_fid='file_id',
+        start_tid='task_id'
+    ) * StopComments.proj(
+        'stop_comment',
+        'stop_timestamp',
+        stop_fid='file_id',
+        stop_tid='task_id'
+    )
 
-    def make(self,key):
-        #Get the nev file associated with the start and stop comments
-        source = StartComments.proj('start_comment','start_timestamp',start_fid='file_id',start_tid='task_id') * StopComments.proj('stop_comment','stop_timestamp',stop_fid='file_id',stop_tid='task_id')
+    def make(self, key):
+        # Get the nev file associated with the start and stop comments
+        source = StartComments.proj(
+            'start_comment',
+            'start_timestamp',
+            start_fid='file_id',
+            start_tid='task_id'
+        ) * StopComments.proj(
+            'stop_comment',
+            'stop_timestamp',
+            stop_fid='file_id',
+            stop_tid='task_id'
+        )
 
         start_file = (NSPChunks & ('file_id = ' + str((source & key).fetch1('start_fid')))).fetch1('file')
-
         stop_file = (NSPChunks & ('file_id = '+str((source & key).fetch1('stop_fid')))).fetch1('file')
 
         # Extract last three digits from the strings
@@ -271,36 +305,48 @@ class StitchedChunks(dj.Computed):
         missing_entries = [f'{start_file[:-3]}{str(num).zfill(3)}' for num in missing_range]
 
         entries = missing_entries
-        entries.insert(0,start_file)
+        entries.insert(0, start_file)
         entries.append(stop_file)
 
-        #create list of missing entries
-        NEV = []
-        NS3 = []
-        NS5 = []
+        # create list of missing entries
+        nev = []
+        ns3 = []
+        ns5 = []
         for entry in entries:
-            nev, ns3, ns5 = (NSPChunks & 'file = "{}"'.format(entry)).fetch1('nev_file','ns3_file','ns5_file')
-            NEV.append(nev)
-            NS3.append(ns3)
-            NS5.append(ns5)
-
+            nev, ns3, ns5 = (NSPChunks & 'file = "{}"'.format(entry)).fetch1('nev_file', 'ns3_file', 'ns5_file')
+            nev.append(nev)
+            ns3.append(ns3)
+            ns5.append(ns5)
 
         emu_id = (source & key).fetch1('emu_id')
 
-        #Stitch the NEV files
-        stitched_nev = StitchedNeVFile(NEV,start=(source & key).fetch1('start_timestamp'),end=(source & key).fetch1('stop_timestamp'))
+        # TODO: Lump these into a loop over available filetypes
+        # Stitch the NEV files
+        stitched_nev = StitchedNeVFile(
+            nev,
+            start=(source & key).fetch1('start_timestamp'),
+            end=(source & key).fetch1('stop_timestamp')
+        )
         full_nev_path = os.path.join('/app/Data/EMU24/Ext_Stitch', f'EMU{emu_id}-stitched.nev')
         with open(full_nev_path, 'wb') as f:
             stitched_nev.write(f)
 
-        #Stitch the NS3 files
-        stitched_ns3 = StitchedNsXFile(NS3,start=(source & key).fetch1('start_timestamp'),end=(source & key).fetch1('stop_timestamp'))
+        # Stitch the NS3 files
+        stitched_ns3 = StitchedNsXFile(
+            ns3,
+            start=(source & key).fetch1('start_timestamp'),
+            end=(source & key).fetch1('stop_timestamp')
+        )
         full_ns3_path = os.path.join('/app/Data/EMU24/Ext_Stitch', f'EMU{emu_id}-stitched.ns3')
         with open(full_ns3_path, 'wb') as f:
             stitched_ns3.write(f)
 
-        #Stitch the NS5 files
-        stitched_ns5 = StitchedNsXFile(NS5,start=(source & key).fetch1('start_timestamp'),end=(source & key).fetch1('stop_timestamp'))
+        # Stitch the NS5 files
+        stitched_ns5 = StitchedNsXFile(
+            ns5,
+            start=(source & key).fetch1('start_timestamp'),
+            end=(source & key).fetch1('stop_timestamp')
+        )
         full_ns5_path = os.path.join('/app/Data/EMU24/Ext_Stitch', f'EMU{emu_id}-stitched.ns5')
         with open(full_ns5_path, 'wb') as f:
             stitched_ns5.write(f)
@@ -311,6 +357,3 @@ class StitchedChunks(dj.Computed):
         key['start_filename'] = start_file
         key['stop_filename'] = stop_file
         self.insert1(key)
-
-
-
