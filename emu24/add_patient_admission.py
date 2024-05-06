@@ -1,19 +1,15 @@
-
-print('Connecting to the database...')
-
-from emu24.gen_helper import *
-from emu24 import EMU24 as emu24
+from gen_helper import *
 
 
 def make_admission(patient_pk):
-    query = emu24.Admission & f'patient_id={patient_pk}'
-    found = query.fetchall('admission_id')
+    query = Admission & f"patient_id='{patient_pk}'"
+    found = query.fetch('admission_id')
 
-    new_admission_pk = len(found)
+    new_admission_pk = found.size + 1
     print('What date is the start of the admission?')
     date = input(" > ")
 
-    emu24.Admission().insert1({
+    Admission().insert1({
         'admission_id': new_admission_pk,
         'patient_id': patient_pk,
         'admission_date': date
@@ -28,10 +24,10 @@ def make_patient():
         print("Empty input. Exiting...")
         exit()
 
-    query = emu24.Patient & f'emu_id={emu_id}'
-    found = query.fetch1('patient_id')
+    query = Patient() & f"emu_id='{emu_id}'"
+    found = query.fetch()
 
-    if found is None:
+    if found.size == 0:
         print("No patient found with this ID. Would you like to make a new patient?")
         response = input("(y/n) > ")
         if response == "n" or response.lower() == "no":
@@ -42,8 +38,8 @@ def make_patient():
         print('Please enter the patient\'s date of birth')
         dob = input(" > ")
 
-        patient_id = len(emu24.Patient())
-        emu24.Patient().insert1({
+        patient_id = len(Patient()) + 1
+        Patient().insert1({
             'patient_id': patient_id,
             'emu_id': emu_id,
             'dob': dob
@@ -52,7 +48,7 @@ def make_patient():
 
     else:
         print('Found a patient with this ID')
-        patient_id = found
+        patient_id = found[0][0]
 
     print('Would you like to register a new admission?')
     response = input("(y/n) > ")
