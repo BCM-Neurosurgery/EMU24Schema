@@ -31,5 +31,5 @@ dj.config['stores'] = {
 dj.conn()
 
 print('Importing schema...')
-from emu24.EMU24 import *
+from EMU24 import *
 
