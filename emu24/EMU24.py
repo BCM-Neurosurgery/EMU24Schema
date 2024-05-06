@@ -87,14 +87,14 @@ class NSPChunks(dj.Computed):
     ---
     file: varchar(256)
     absolute_time: varchar(256)
-    nev_file: filepath@Ext_Chunk
-    ns3_file: filepath@Ext_Chunk
-    ns5_file: filepath@Ext_Chunk
+    nev_file = NULL: filepath@Ext_Chunk
+    ns3_file = NULL: filepath@Ext_Chunk
+    ns5_file = NULL: filepath@Ext_Chunk
     """
-    key_source = NEVChunks * NS3Chunks * NS5Chunks
+    key_source = (NEVChunks * NS3Chunks) + (NEVChunks * NS5Chunks)
 
     def make(self, key):
-        source = NEVChunks * NS3Chunks * NS5Chunks
+        source = self.key_source
 
         key_dict = (source & key).fetch1()
 
@@ -105,17 +105,21 @@ class NSPChunks(dj.Computed):
         # Get the chunk ID
         key['chunk_id'] = int(nev_file[-7:-4])
 
+        # Load headers either from ns3 or ns5
+        try:
+            nsx_fileobj = NsxFile(key_dict['ns3_file'])
+        except KeyError:
+            nsx_fileobj = NsxFile(key_dict['ns5_file'])
+
         # Extract the absolute time
-
-        ns5_fileobj = NsxFile(key_dict['ns5_file'])
-
-        header = ns5_fileobj.basic_header
-
+        header = nsx_fileobj.basic_header
         key['absolute_time'] = str(header['TimeOrigin'])
 
         key['nev_file'] = key_dict['nev_file']
-        key['ns5_file'] = key_dict['ns5_file']
-        key['ns3_file'] = key_dict['ns3_file']
+        if 'ns3_file' in key_dict:
+            key['ns3_file'] = key_dict['ns3_file']
+        if 'ns5_file' in key_dict:
+            key['ns5_file'] = key_dict['ns5_file']
 
         # Insert into database
         self.insert1(key)
