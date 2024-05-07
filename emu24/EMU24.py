@@ -91,7 +91,7 @@ class NSPChunks(dj.Computed):
     ns3_file = NULL: filepath@Ext_Chunk
     ns5_file = NULL: filepath@Ext_Chunk
     """
-    key_source = NEVChunks + NS3Chunks + NS5Chunks
+    key_source = (NEVChunks + NS3Chunks) + NS5Chunks
 
     def make(self, key):
         source = self.key_source
