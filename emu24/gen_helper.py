@@ -6,6 +6,7 @@ import datajoint as dj
 parser = argparse.ArgumentParser()
 parser.add_argument('-u', '--username', required=False)
 parser.add_argument('-p', '--password', required=False)
+parser.add_argument('-t', '--test-mode', action='store_true')
 args = parser.parse_args()
 print('Here')
 
@@ -16,18 +17,32 @@ if args.username and args.password:
 dj.config['database.host'] = 'localhost'
 dj.config['database.port'] = 3306
 
-dj.config['stores'] = {
-    "Ext_Chunk": {
-        "protocol": "file",
-        "location": "/mnt/datalake/data/emu/",
-        "stage": "/mnt/datalake/data/emu/"
-    },
-    "Ext_Stitch": {
-        "protocol": "file",
-        "location": "/mnt/lake-database/stitched",
-        "stage": "/mnt/lake-database/stitched"
+if args.test_mode:
+    dj.config['stores'] = {
+        "Ext_Chunk": {
+            "protocol": "file",
+            "location": "/mnt/datalake/test/emu/",
+            "stage": "/mnt/datalake/test/emu/"
+        },
+        "Ext_Stitch": {
+            "protocol": "file",
+            "location": "/mnt/lake-database/test-stitched",
+            "stage": "/mnt/lake-database/test-stitched"
+        }
     }
-}
+else:
+    dj.config['stores'] = {
+        "Ext_Chunk": {
+            "protocol": "file",
+            "location": "/mnt/datalake/data/emu/",
+            "stage": "/mnt/datalake/data/emu/"
+        },
+        "Ext_Stitch": {
+            "protocol": "file",
+            "location": "/mnt/lake-database/stitched",
+            "stage": "/mnt/lake-database/stitched"
+        }
+    }
 dj.conn()
 
 print('Importing schema...')
