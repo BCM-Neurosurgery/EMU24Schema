@@ -83,7 +83,6 @@ class NSPChunks(dj.Computed):
     -> NS5Chunks
     -> NS3Chunks
     -> NEVChunks
-    chunk_id: int  # primary key  
     ---
     file: varchar(256)
     absolute_time: varchar(256)
@@ -91,31 +90,38 @@ class NSPChunks(dj.Computed):
     ns3_file = NULL: filepath@Ext_Chunk
     ns5_file = NULL: filepath@Ext_Chunk
     """
-    key_source = (NEVChunks + NS3Chunks) + NS5Chunks
+    key_source = NS3Chunks + NS5Chunks
 
     def make(self, key):
         source = self.key_source
 
         key_dict = (source & key).fetch1()
 
-        # Get the file name
-        nev_file = key_dict['nev_file']
-        key['file'] = nev_file[:-4]
-
-        # Get the chunk ID
-        key['chunk_id'] = int(nev_file[-7:-4])
+        # Get all the primary keys to look up the correct NeV file
+        patient, admission = key_dict['patient_id'], key_dict['admission_id']
+        toc, nsp, chunk = key_dict['toc_id'], key_dict['nsp_id'], key_dict['chunk_id']
+        query = NEVChunks & (
+            f"patient_id='{patient}'"
+            f"& admission_id='{admission}'"
+            f"& toc_id='{toc}'"
+            f"& nsp_id='{nsp}'"
+            f"& chunk_id='{chunk}'"
+        )
+        nev_file = query.fetch1('nev_file')
 
         # Load headers either from ns3 or ns5
         try:
             nsx_fileobj = NsxFile(key_dict['ns3_file'])
+            key['file'] = key_dict['ns3_file'][:-4]
         except KeyError:
             nsx_fileobj = NsxFile(key_dict['ns5_file'])
+            key['file'] = key_dict['ns5_file'][:-4]
 
         # Extract the absolute time
         header = nsx_fileobj.basic_header
         key['absolute_time'] = str(header['TimeOrigin'])
 
-        key['nev_file'] = key_dict['nev_file']
+        key['nev_file'] = nev_file
         if 'ns3_file' in key_dict:
             key['ns3_file'] = key_dict['ns3_file']
         if 'ns5_file' in key_dict:
