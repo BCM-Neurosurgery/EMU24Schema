@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='emu24',
-    version='1.0.5',
+    version='1.0.6',
     description='Schema for 24 hour EMU ingestion.',
     author='Paul J Steffan',
     author_email='paul.steffan@bcm.edu',
