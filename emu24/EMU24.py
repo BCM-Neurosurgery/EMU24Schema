@@ -80,8 +80,6 @@ class NS5Chunks(dj.Manual):
 @schema
 class NSPChunks(dj.Computed):
     definition = """
-    -> NS5Chunks
-    -> NS3Chunks
     -> NEVChunks
     ---
     file: varchar(256)
@@ -101,19 +99,19 @@ class NSPChunks(dj.Computed):
         patient, admission = key_dict['patient_id'], key_dict['admission_id']
         toc, nsp, chunk = key_dict['toc_id'], key_dict['nsp_id'], key_dict['chunk_id']
         query = NEVChunks & (
-            f"patient_id='{patient}'"
-            f"& admission_id='{admission}'"
-            f"& toc_id='{toc}'"
-            f"& nsp_id='{nsp}'"
-            f"& chunk_id='{chunk}'"
+            f"patient_id={patient} "
+            f"AND admission_id={admission} "
+            f"AND toc_id={toc} "
+            f"AND nsp_id={nsp} "
+            f"AND chunk_id={chunk}"
         )
         nev_file = query.fetch1('nev_file')
 
         # Load headers either from ns3 or ns5
-        try:
+        if key_dict['ns3_file'] is not None:
             nsx_fileobj = NsxFile(key_dict['ns3_file'])
             key['file'] = key_dict['ns3_file'][:-4]
-        except KeyError:
+        else:
             nsx_fileobj = NsxFile(key_dict['ns5_file'])
             key['file'] = key_dict['ns5_file'][:-4]
 
@@ -122,10 +120,12 @@ class NSPChunks(dj.Computed):
         key['absolute_time'] = str(header['TimeOrigin'])
 
         key['nev_file'] = nev_file
-        if 'ns3_file' in key_dict:
+        if key_dict['ns3_file'] is not None:
             key['ns3_file'] = key_dict['ns3_file']
-        if 'ns5_file' in key_dict:
+        if key_dict['ns5_file'] is not None:
             key['ns5_file'] = key_dict['ns5_file']
+
+        print(self.definition)
 
         # Insert into database
         self.insert1(key)
