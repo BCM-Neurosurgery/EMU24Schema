@@ -291,7 +291,7 @@ class StitchedChunks(dj.Computed):
         stop_tid='task_id'
     )
     identifiers = ['patient_id', 'admission_id', 'toc_id', 'nsp_id', 'chunk_id']
-    output = '/mnt/lake-database/test-stitched'
+    output = '/mnt/lake-database/stitched'
 
     def file_lookup(self, key, task_id_col):
         """Lookup the file that a task"""
