@@ -361,5 +361,5 @@ class StitchedChunks(dj.Computed):
 
         try:
             self.insert1(key)
-        except Exception as e:
-            raise e
+        except dj.DataJointError as e:
+            print(e)
