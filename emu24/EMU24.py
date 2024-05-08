@@ -286,84 +286,73 @@ class StitchedChunks(dj.Computed):
         stop_fid='file_id',
         stop_tid='task_id'
     )
+    identifiers = ['patient_id', 'admission_id', 'toc_id', 'nsp_id', 'chunk_id']
+    output = '/mnt/lake-database/test-stitched'
+
+    def file_lookup(self, key, task_id_col):
+        """Lookup the file that a task"""
+        task_id = (self.key_source & key).fetch1(task_id_col)
+        chunk_keys = (TaskComments & f"task_id={task_id}").fetch1(*self.identifiers)
+        chunk_id = chunk_keys[-1]  # Chunk_id is last because of order of identifiers
+
+        nsp_lookup = [f'{name}={value}' for name, value in zip(self.identifiers, chunk_keys)]
+        filename = (NSPChunks & ' AND '.join(nsp_lookup)).fetch1('file')
+        return filename, chunk_id
 
     def make(self, key):
         # Get the nev file associated with the start and stop comments
-        source = StartComments.proj(
-            'start_comment',
-            'start_timestamp',
-            start_fid='file_id',
-            start_tid='task_id'
-        ) * StopComments.proj(
-            'stop_comment',
-            'stop_timestamp',
-            stop_fid='file_id',
-            stop_tid='task_id'
-        )
+        start_file, start_chunk = self.file_lookup(key, 'start_tid')
+        stop_file, stop_chunk = self.file_lookup(key, 'stop_tid')
 
-        start_file = (NSPChunks & ('file_id = ' + str((source & key).fetch1('start_fid')))).fetch1('file')
-        stop_file = (NSPChunks & ('file_id = '+str((source & key).fetch1('stop_fid')))).fetch1('file')
+        patient = (Patient & f"patient_id='{key['patient_id']}'").fetch1('emu_id')
 
-        # Extract last three digits from the strings
-        last_digits_start = int(start_file.split('-')[-1])
-        last_digits_stop = int(stop_file.split('-')[-1])
-
-        # Determine the range of missing values
-        missing_range = range(last_digits_start + 1, last_digits_stop)
-
-        # Generate the missing entries
-        missing_entries = [f'{start_file[:-3]}{str(num).zfill(3)}' for num in missing_range]
-
-        entries = missing_entries
-        entries.insert(0, start_file)
-        entries.append(stop_file)
+        # Determine the range of missing values and generate the missing files
+        all_chunks = list(range(start_chunk, stop_chunk + 1))
+        all_files = [f'{start_file[:-3]}{str(num).zfill(3)}' for num in all_chunks]
 
         # create list of missing entries
-        nev = []
-        ns3 = []
-        ns5 = []
-        for entry in entries:
+        all_nevs = []
+        all_nsxs = {'ns3': [], 'ns5': []}
+        for entry in all_files:
             nev, ns3, ns5 = (NSPChunks & 'file = "{}"'.format(entry)).fetch1('nev_file', 'ns3_file', 'ns5_file')
-            nev.append(nev)
-            ns3.append(ns3)
-            ns5.append(ns5)
+            all_nevs.append(nev)
+            if ns3 is not None:
+                all_nsxs['ns3'].append(ns3)
+            if ns5 is not None:
+                all_nsxs['ns5'].append(ns5)
 
-        emu_id = (source & key).fetch1('emu_id')
+        emu_id = (self.key_source & key).fetch1('emu_id')
+        out_path = os.path.join(self.output, patient)
+        os.makedirs(out_path, exist_ok=True)
 
-        # TODO: Lump these into a loop over available filetypes
         # Stitch the NEV files
         stitched_nev = StitchedNeVFile(
-            nev,
-            start=(source & key).fetch1('start_timestamp'),
-            end=(source & key).fetch1('stop_timestamp')
+            all_nevs,
+            start=(self.key_source & key).fetch1('start_timestamp'),
+            end=(self.key_source & key).fetch1('stop_timestamp')
         )
-        full_nev_path = os.path.join('/app/Data/EMU24/Ext_Stitch', f'EMU{emu_id}-stitched.nev')
+        full_nev_path = os.path.join(out_path, f'EMU{emu_id}-stitched.nev')
         with open(full_nev_path, 'wb') as f:
             stitched_nev.write(f)
-
-        # Stitch the NS3 files
-        stitched_ns3 = StitchedNsXFile(
-            ns3,
-            start=(source & key).fetch1('start_timestamp'),
-            end=(source & key).fetch1('stop_timestamp')
-        )
-        full_ns3_path = os.path.join('/app/Data/EMU24/Ext_Stitch', f'EMU{emu_id}-stitched.ns3')
-        with open(full_ns3_path, 'wb') as f:
-            stitched_ns3.write(f)
-
-        # Stitch the NS5 files
-        stitched_ns5 = StitchedNsXFile(
-            ns5,
-            start=(source & key).fetch1('start_timestamp'),
-            end=(source & key).fetch1('stop_timestamp')
-        )
-        full_ns5_path = os.path.join('/app/Data/EMU24/Ext_Stitch', f'EMU{emu_id}-stitched.ns5')
-        with open(full_ns5_path, 'wb') as f:
-            stitched_ns5.write(f)
-
         key['nev_file'] = full_nev_path
-        key['ns3_file'] = full_ns3_path
-        key['ns5_file'] = full_ns5_path
+
+        # Stitch and save the locations of the NSX files
+        for filetype, files in all_nsxs.items():
+            if not files:
+                continue  # Skip filetypes that we don't have
+            stitched_nsx = StitchedNsXFile(
+                files,
+                start=(self.key_source & key).fetch1('start_timestamp'),
+                end=(self.key_source & key).fetch1('stop_timestamp')
+            )
+            full_nsx_path = os.path.join(out_path, f'EMU{emu_id}-stitched.{filetype}')
+            with open(full_nsx_path, 'wb') as f:
+                stitched_nsx.write(f)
+            key[f'{filetype}_file'] = full_nsx_path
+
         key['start_filename'] = start_file
         key['stop_filename'] = stop_file
-        self.insert1(key)
+        try:
+            self.insert1(key)
+        except Exception as e:
+            raise e
