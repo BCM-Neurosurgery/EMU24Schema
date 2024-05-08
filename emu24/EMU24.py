@@ -125,8 +125,6 @@ class NSPChunks(dj.Computed):
         if key_dict['ns5_file'] is not None:
             key['ns5_file'] = key_dict['ns5_file']
 
-        print(self.definition)
-
         # Insert into database
         self.insert1(key)
 
