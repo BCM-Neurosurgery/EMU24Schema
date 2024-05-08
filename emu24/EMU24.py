@@ -203,7 +203,11 @@ class StartComments(dj.Computed):
 
     def make(self, key):
 
-        comment, timestamp = (TaskComments.proj('comment_type',start_comment='task_comment',start_timestamp='timestamp')  &  key).fetch1('start_comment', 'start_timestamp')
+        comment, timestamp = (TaskComments.proj(
+            'comment_type',
+            start_comment='task_comment',
+            start_timestamp='timestamp'
+        ) & key).fetch1('start_comment', 'start_timestamp')
         key['start_comment'] = comment
         key['start_timestamp'] = timestamp
         task_pattern = "task-(.*?)_"
@@ -272,8 +276,8 @@ class StitchedChunks(dj.Computed):
     start_filename: varchar(255)  # secondary attribute
     stop_filename: varchar(255)  # secondary attribute
     nev_file: filepath@Ext_Stitch
-    ns3_file: filepath@Ext_Stitch
-    ns5_file: filepath@Ext_Stitch
+    ns3_file = NULL: filepath@Ext_Stitch
+    ns5_file = NULL: filepath@Ext_Stitch
     """
     key_source = StartComments.proj(
         'start_comment',
@@ -303,8 +307,12 @@ class StitchedChunks(dj.Computed):
         # Get the nev file associated with the start and stop comments
         start_file, start_chunk = self.file_lookup(key, 'start_tid')
         stop_file, stop_chunk = self.file_lookup(key, 'stop_tid')
+        key['start_filename'] = start_file
+        key['stop_filename'] = stop_file
 
-        patient = (Patient & f"patient_id='{key['patient_id']}'").fetch1('emu_id')
+        # Fetch the start and stop as NSP timestamps
+        start_ts = (self.key_source & key).fetch1('start_timestamp')
+        end_ts = (self.key_source & key).fetch1('stop_timestamp')
 
         # Determine the range of missing values and generate the missing files
         all_chunks = list(range(start_chunk, stop_chunk + 1))
@@ -321,17 +329,22 @@ class StitchedChunks(dj.Computed):
             if ns5 is not None:
                 all_nsxs['ns5'].append(ns5)
 
-        emu_id = (self.key_source & key).fetch1('emu_id')
-        out_path = os.path.join(self.output, patient)
+        # Fetch any additional metadata needed for file naming
+        patient = (Patient & f"patient_id='{key['patient_id']}'").fetch1('emu_id')
+        id_comments = (TaskComments & f"timestamp >= {start_ts} AND timestamp < {end_ts} AND comment_type='TASKID' AND nsp_id = {key['nsp_id']}").fetch()
+        if len(id_comments):
+            # No suitable task comments found, use a auto-generated name
+            task_name = f"EMU-{key['emu_id']}_subj-{patient}_task-UNKNOWN_NSP-{key['nsp_id']}"
+        else:
+            # Use the first task comment ot generate a name
+            task_name = id_comments[0]['task_comment'].split(' ')[-1]
+
+        out_path = os.path.join(self.output, patient, task_name)
         os.makedirs(out_path, exist_ok=True)
 
         # Stitch the NEV files
-        stitched_nev = StitchedNeVFile(
-            all_nevs,
-            start=(self.key_source & key).fetch1('start_timestamp'),
-            end=(self.key_source & key).fetch1('stop_timestamp')
-        )
-        full_nev_path = os.path.join(out_path, f'EMU{emu_id}-stitched.nev')
+        stitched_nev = StitchedNeVFile(all_nevs, start=start_ts, end=end_ts)
+        full_nev_path = os.path.join(out_path, f'{task_name}.nev')
         with open(full_nev_path, 'wb') as f:
             stitched_nev.write(f)
         key['nev_file'] = full_nev_path
@@ -340,18 +353,12 @@ class StitchedChunks(dj.Computed):
         for filetype, files in all_nsxs.items():
             if not files:
                 continue  # Skip filetypes that we don't have
-            stitched_nsx = StitchedNsXFile(
-                files,
-                start=(self.key_source & key).fetch1('start_timestamp'),
-                end=(self.key_source & key).fetch1('stop_timestamp')
-            )
-            full_nsx_path = os.path.join(out_path, f'EMU{emu_id}-stitched.{filetype}')
+            stitched_nsx = StitchedNsXFile(files, start=start_ts, end=end_ts)
+            full_nsx_path = os.path.join(out_path, f'{task_name}.{filetype}')
             with open(full_nsx_path, 'wb') as f:
                 stitched_nsx.write(f)
             key[f'{filetype}_file'] = full_nsx_path
 
-        key['start_filename'] = start_file
-        key['stop_filename'] = stop_file
         try:
             self.insert1(key)
         except Exception as e:
