@@ -337,7 +337,7 @@ class StitchedChunks(dj.Computed):
         # Fetch any additional metadata needed for file naming
         patient = (Patient & f"patient_id='{key['patient_id']}'").fetch1('emu_id')
         id_comments = (TaskComments & f"timestamp >= {start_ts} AND timestamp < {end_ts} AND comment_type='TASKID' AND nsp_id = {key['nsp_id']}").fetch()
-        if len(id_comments):
+        if not len(id_comments):
             # No suitable task comments found, use a auto-generated name
             task_name = f"EMU-{key['emu_id']}_subj-{patient}_task-UNKNOWN_NSP-{key['nsp_id']}"
         else:
