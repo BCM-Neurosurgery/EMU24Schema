@@ -136,7 +136,7 @@ class TaskComments(dj.Computed):
     task_id: int  # primary key
     ---
     task_comment: varchar(256)  
-    timestamp: int 
+    timestamp: bigint 
     comment_type: varchar(256)  
     """
 
