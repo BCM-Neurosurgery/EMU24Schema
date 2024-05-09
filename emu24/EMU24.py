@@ -147,6 +147,8 @@ class TaskComments(dj.Computed):
 
         file = (NSPChunks & key).fetch1('nev_file')
         df = get_all_nev_comments([file])
+        if df.empty:
+            return  # No comments here so go to next file
         # Get all comments from the NEV file
         pattern = '$TASK'
         comments = df['Data'].str
