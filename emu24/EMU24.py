@@ -149,6 +149,8 @@ class TaskComments(dj.Computed):
         df = get_all_nev_comments([file])
         if df.empty:
             return  # No comments here so go to next file
+        else:
+            print(f'Found {len(df)} comments')
         # Get all comments from the NEV file
         pattern = '$TASK'
         comments = df['Data'].str
