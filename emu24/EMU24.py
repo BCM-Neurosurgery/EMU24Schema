@@ -197,7 +197,7 @@ class StartComments(dj.Computed):
     emu_id: int
     ---
     start_comment: varchar(256) 
-    start_timestamp: int
+    start_timestamp: bigint
     task_name: varchar(255)  # secondary attribute
     """
     key_source = TaskComments.proj(
@@ -243,7 +243,7 @@ class StopComments(dj.Computed):
     emu_id: int
     ---
     stop_comment: varchar(256)
-    stop_timestamp: int
+    stop_timestamp: bigint
     """
     key_source = TaskComments.proj(
         'comment_type',
