@@ -182,7 +182,12 @@ class TaskComments(dj.Computed):
             max_id = max_id + 1
             key['timestamp'] = row['TimeStamps']
             key['task_id'] = max_id
-            self.insert1(key)
+
+            try:
+                self.insert1(key)
+            except Exception as e:
+                print(key)
+                raise e
 
 
 @schema
