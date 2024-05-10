@@ -360,7 +360,7 @@ class StitchedChunks(dj.Computed):
         for filetype, files in all_nsxs.items():
             if not files:
                 continue  # Skip filetypes that we don't have
-            stitched_nsx = StitchedNsXFile(files, start=start_ts, end=end_ts)
+            stitched_nsx = StitchedNsXFile(files, start=start_ts, end=end_ts, aggressive_concat=True)
             full_nsx_path = os.path.join(out_path, f'{task_name}.{filetype}')
             with open(full_nsx_path, 'wb') as f:
                 stitched_nsx.write(f)
