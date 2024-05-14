@@ -156,7 +156,7 @@ class TaskComments(dj.Computed):
         comments = df['Data'].str
         idx = comments.contains(pattern, regex=False)
         matched_entries = df[idx]
-        unique_comments = matched_entries.drop_duplicates()
+        unique_comments = matched_entries.drop_duplicates(subset=matched_entries.columns.difference(['timestamp']))
         for index, row in unique_comments.iterrows():
             if '$TASKID' in row['Data']:
                 key['task_comment'] = row['Data']
@@ -290,12 +290,14 @@ class StitchedChunks(dj.Computed):
         'start_comment',
         'start_timestamp',
         start_fid='file_id',
-        start_tid='task_id'
+        start_tid='task_id',
+        start_chunk='chunk_id'
     ) * StopComments.proj(
         'stop_comment',
         'stop_timestamp',
         stop_fid='file_id',
-        stop_tid='task_id'
+        stop_tid='task_id',
+        stop_chunk='chunk_id'
     )
     identifiers = ['patient_id', 'admission_id', 'toc_id', 'nsp_id', 'chunk_id']
     output = '/mnt/lake-database/stitched'
