@@ -157,6 +157,15 @@ class TaskComments(dj.Computed):
         idx = comments.contains(pattern, regex=False)
         matched_entries = df[idx]
         unique_comments = matched_entries.drop_duplicates(subset=matched_entries.columns.difference(['timestamp']))
+
+        # Special case foe if there are no comments in this file, so it doesn't get re-computed every time
+        if unique_comments.empty:
+            max_id += 1
+            key['task_comment'] = "This chunk did not contain any comments"
+            key['comment_type'] = 'NOCOMMENT'
+            key['timestamp'] = 0
+            key['task_id'] = max_id
+
         for index, row in unique_comments.iterrows():
             if '$TASKID' in row['Data']:
                 key['task_comment'] = row['Data']
@@ -181,7 +190,7 @@ class TaskComments(dj.Computed):
                 key['task_comment'] = row['Data']
                 key['comment_type'] = 'UNDEFINED'
 
-            max_id = max_id + 1
+            max_id += 1
             key['timestamp'] = row['TimeStamps']
             key['task_id'] = max_id
 
