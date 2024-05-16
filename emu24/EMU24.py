@@ -148,7 +148,13 @@ class TaskComments(dj.Computed):
         file = (NSPChunks & key).fetch1('nev_file')
         df = get_all_nev_comments([file])
         if df.empty:
-            return  # No comments here so go to next file
+            # Special case foe if there are no comments in this file, so it doesn't get re-computed every time
+            max_id += 1
+            key['task_comment'] = "This chunk did not contain any comments"
+            key['comment_type'] = 'NOCOMMENT'
+            key['timestamp'] = 0
+            key['task_id'] = max_id
+            return  # No need to continue here
         else:
             print(f'Found {len(df)} comments')
         # Get all comments from the NEV file
@@ -157,14 +163,6 @@ class TaskComments(dj.Computed):
         idx = comments.contains(pattern, regex=False)
         matched_entries = df[idx]
         unique_comments = matched_entries.drop_duplicates(subset=matched_entries.columns.difference(['timestamp']))
-
-        # Special case foe if there are no comments in this file, so it doesn't get re-computed every time
-        if unique_comments.empty:
-            max_id += 1
-            key['task_comment'] = "This chunk did not contain any comments"
-            key['comment_type'] = 'NOCOMMENT'
-            key['timestamp'] = 0
-            key['task_id'] = max_id
 
         for index, row in unique_comments.iterrows():
             if '$TASKID' in row['Data']:
