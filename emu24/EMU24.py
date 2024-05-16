@@ -277,8 +277,8 @@ class StopComments(dj.Computed):
 @schema
 class StitchedChunks(dj.Computed):
     definition = """
-    -> StartComments.proj('start_comment',start_fid='file_id',start_tid='task_id')
-    -> StopComments.proj('stop_comment',stop_fid='file_id',stop_tid='task_id')
+    -> StartComments.proj('start_comment',start_fid='file_id',start_tid='task_id',start_chunk='chunk_id')
+    -> StopComments.proj('stop_comment',stop_fid='file_id',stop_tid='task_id',stop_chunk='chunk_id')
     ---
     start_filename: varchar(255)  # secondary attribute
     stop_filename: varchar(255)  # secondary attribute
