@@ -154,6 +154,8 @@ class TaskComments(dj.Computed):
             key['comment_type'] = 'NOCOMMENT'
             key['timestamp'] = 0
             key['task_id'] = max_id
+            self.insert1(key)
+            print(f'Saved NOCOMMENTS for {file}')
             return  # No need to continue here
         else:
             print(f'Found {len(df)} comments')
