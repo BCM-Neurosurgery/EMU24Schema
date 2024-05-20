@@ -357,12 +357,16 @@ class StitchedChunks(dj.Computed):
             # Use the first task comment ot generate a name
             task_name = id_comments[0]['task_comment'].split(' ')[-1]
 
-        out_path = os.path.join(self.output, patient, task_name)
+        folder_name = '-'.join(task_name.split('-')[:-1])   # Drop the NSP id for the folder name
+        out_path = os.path.join(self.output, patient, folder_name)
         os.makedirs(out_path, exist_ok=True)
 
         # Stitch the NEV files
         stitched_nev = StitchedNeVFile(all_nevs, start=start_ts, end=end_ts)
         full_nev_path = os.path.join(out_path, f'{task_name}.nev')
+        if os.path.exists(full_nev_path):
+            print(f'Overwriting old output file: {full_nev_path}')
+            os.remove(full_nev_path)
         with open(full_nev_path, 'wb') as f:
             stitched_nev.write(f)
         key['nev_file'] = full_nev_path
@@ -373,6 +377,9 @@ class StitchedChunks(dj.Computed):
                 continue  # Skip filetypes that we don't have
             stitched_nsx = StitchedNsXFile(files, start=start_ts, end=end_ts, aggressive_concat=True)
             full_nsx_path = os.path.join(out_path, f'{task_name}.{filetype}')
+            if os.path.exists(full_nsx_path):
+                print(f'Overwriting old output file: {full_nsx_path}')
+                os.remove(full_nsx_path)
             with open(full_nsx_path, 'wb+') as f:
                 stitched_nsx.write(f)
             key[f'{filetype}_file'] = full_nsx_path
