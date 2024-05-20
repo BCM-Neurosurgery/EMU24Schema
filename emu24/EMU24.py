@@ -357,7 +357,7 @@ class StitchedChunks(dj.Computed):
             # Use the first task comment ot generate a name
             task_name = id_comments[0]['task_comment'].split(' ')[-1]
 
-        folder_name = '-'.join(task_name.split('NSP-')[:-1])   # Drop the NSP id for the folder name
+        folder_name = '-'.join(task_name.split('_NSP-')[:-1])   # Drop the NSP id for the folder name
         out_path = os.path.join(self.output, patient, folder_name)
         os.makedirs(out_path, exist_ok=True)
 
