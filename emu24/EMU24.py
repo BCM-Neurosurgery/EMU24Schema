@@ -7,6 +7,17 @@ from pyNsXStitch.stitchers import StitchedNeVFile, StitchedNsXFile
 from pyNsXStitch.helpers import get_all_nev_comments
 
 
+def get_emu_id(comment_text):
+    """
+    Extract the EMU ID number from the comment contents
+
+    All comments linked to a task contain an EMU ID in the form 'EMU-####'
+    """
+    emu_match = re.search(" EMU-(.*?)", comment_text)
+    emu_id = int(emu_match.group(1), 10) if emu_match else 99999
+    return emu_id
+
+
 # Define the schema
 schema = dj.schema('paulsteffan_EMU24')
 
@@ -135,9 +146,9 @@ class TaskComments(dj.Computed):
     -> NSPChunks
     task_id: int  # primary key
     ---
-    task_comment: varchar(256)  
+    comment: varchar(256)  
     timestamp: bigint 
-    comment_type: varchar(256)  
+    type: varchar(256)  
     """
 
     def make(self, key):
@@ -150,15 +161,15 @@ class TaskComments(dj.Computed):
         if df.empty:
             # Special case foe if there are no comments in this file, so it doesn't get re-computed every time
             max_id += 1
-            key['task_comment'] = "This chunk did not contain any comments"
-            key['comment_type'] = 'NOCOMMENT'
+            key['comment'] = "This chunk did not contain any comments"
+            key['type'] = 'NOCOMMENT'
             key['timestamp'] = 0
             key['task_id'] = max_id
             self.insert1(key)
             print(f'Saved NOCOMMENTS for {file}')
             return  # No need to continue here
         else:
-            print(f'Found {len(df)} comments')
+            print(f'\n Found {len(df)} comments in {file}')
         # Get all comments from the NEV file
         pattern = '$TASK'
         comments = df['Data'].str
@@ -167,27 +178,28 @@ class TaskComments(dj.Computed):
         unique_comments = matched_entries.drop_duplicates(subset=matched_entries.columns.difference(['timestamp']))
 
         for index, row in unique_comments.iterrows():
+
             if '$TASKID' in row['Data']:
-                key['task_comment'] = row['Data']
-                key['comment_type'] = 'TASKID'
+                key['comment'] = row['Data']
+                key['type'] = 'TASKID'
             elif '$TASKSTART' in row['Data']:
-                key['task_comment'] = row['Data']
-                key['comment_type'] = 'START'
+                key['comment'] = row['Data']
+                key['type'] = 'START'
             elif '$TASKSTOP' in row['Data']:
-                key['task_comment'] = row['Data']
-                key['comment_type'] = 'STOP'
+                key['comment'] = row['Data']
+                key['type'] = 'STOP'
             elif '$TASKKILL' in row['Data']:
-                key['task_comment'] = row['Data']
-                key['comment_type'] = 'KILL'
+                key['comment'] = row['Data']
+                key['type'] = 'KILL'
             elif '$TASKERROR' in row['Data']:
-                key['task_comment'] = row['Data']
-                key['comment_type'] = 'ERROR'
+                key['comment'] = row['Data']
+                key['type'] = 'ERROR'
             elif '$TASKMETA' in row['Data']:
-                key['task_comment'] = row['Data']
-                key['comment_type'] = 'META'
+                key['comment'] = row['Data']
+                key['type'] = 'META'
             else:
                 # This will throw an error if there are multiple of the same comment that are undefined
-                key['task_comment'] = row['Data']
+                key['comment'] = row['Data']
                 key['comment_type'] = 'UNDEFINED'
 
             max_id += 1
@@ -209,42 +221,48 @@ class StartComments(dj.Computed):
     ---
     start_comment: varchar(256) 
     start_timestamp: bigint
-    task_name: varchar(255)  # secondary attribute
     """
     key_source = TaskComments.proj(
-        'comment_type',
-        start_comment='task_comment',
+        'type',
+        start_comment='comment',
         start_timestamp='timestamp'
-    ) & 'comment_type = "TASKID"'
+    ) & 'type = "START"'
 
     def make(self, key):
 
-        comment, timestamp = (TaskComments.proj(
-            'comment_type',
-            start_comment='task_comment',
-            start_timestamp='timestamp'
-        ) & key).fetch1('start_comment', 'start_timestamp')
+        comment, timestamp = (self.key_source & key).fetch1('start_comment', 'start_timestamp')
         key['start_comment'] = comment
         key['start_timestamp'] = timestamp
-        task_pattern = "task-(.*?)_"
-        emu_pattern = " EMU-(.*?)_subj"
-
-        # Using re.search() to find the pattern in the string
-        task_match = re.search(task_pattern, comment)
-        emu_match = re.search(emu_pattern, comment)
-
-        # Extracting the matched group, which is the part of the string we want
-        if task_match:
-            key["task_name"] = task_match.group(1)
-        else:
-            key["task_name"] = "UNDEFINED"
-
-        if emu_match:
-            key["emu_id"] = int(emu_match.group(1), 10)
-        else:
-            key["emu_id"] = 99999
+        key['emu_id'] = get_emu_id(comment)
 
         self.insert1(key)
+
+
+@schema
+class TaskIDComments(dj.Computed):
+    definition = """
+    -> TaskComments
+    emu_id: int
+    ---
+    task_comment: varchar(256)
+    task_timestamp: bigint
+    task_type: varchar(256)
+    """
+    key_source = TaskComments.proj(
+        'type',
+        task_comment='comment',
+        task_timestamp='timestamp'
+    ) & 'type = "TASKID"'
+
+    def make(self, key):
+        comment, timestamp = (self.key_source & key).fetch1('task_comment', 'task_timestamp')
+        key['task_comment'] = comment
+        key['task_timestamp'] = timestamp
+        key['emu_id'] = get_emu_id(comment)
+
+        task_match = re.search("task-(.*)_", comment)
+        task_name = task_match.group(1) if task_match else 'UNKNOWN'
+        key['task_name'] = task_name
 
 
 @schema
@@ -257,29 +275,17 @@ class StopComments(dj.Computed):
     stop_timestamp: bigint
     """
     key_source = TaskComments.proj(
-        'comment_type',
-        stop_comment='task_comment',
-        stop_timestamp='timestamp'
-    ) & ['comment_type = "KILL"', 'comment_type = "STOP"']  # TODO: Add Error comment as a termination
+        'type',
+        task_comment='task_comment',
+        task_timestamp='timestamp'
+    ) & ['type = "KILL"', 'type = "STOP"', 'type = "ERROR"']
 
     def make(self, key):
-        comment, timestamp = (TaskComments.proj(
-            'comment_type',
-            stop_comment='task_comment',
-            stop_timestamp='timestamp'
-        ) & key).fetch1('stop_comment', 'stop_timestamp')
+        comment, timestamp = (self.key_source & key).fetch1('task_comment', 'task_timestamp')
         key['stop_comment'] = comment
         key['stop_timestamp'] = timestamp
-        emu_pattern = " EMU-(.*)"
+        key['emu_id'] = get_emu_id(comment)
 
-        # Using re.search() to find the pattern in the string
-        emu_match = re.search(emu_pattern, comment)
-
-        # Extracting the matched group, which is the part of the string we want
-        if emu_match:
-            key["emu_id"] = int(emu_match.group(1), 10)
-        else:
-            key["emu_id"] = 99999
         self.insert1(key)
 
 
@@ -322,6 +328,12 @@ class StitchedChunks(dj.Computed):
         return filename, chunk_id
 
     def make(self, key):
+
+        print(key)
+
+        if (self.key_source & key).fetch1('emu_id') == 89:
+            pass
+
         # Get the nev file associated with the start and stop comments
         start_file, start_chunk = self.file_lookup(key, 'start_tid')
         stop_file, stop_chunk = self.file_lookup(key, 'stop_tid')
@@ -365,7 +377,7 @@ class StitchedChunks(dj.Computed):
         stitched_nev = StitchedNeVFile(all_nevs, start=start_ts, end=end_ts)
         full_nev_path = os.path.join(out_path, f'{task_name}.nev')
         if os.path.exists(full_nev_path):
-            print(f'Overwriting old output file: {full_nev_path}')
+            print(f'\nOverwriting old output file: {full_nev_path}')
             os.remove(full_nev_path)
         with open(full_nev_path, 'wb') as f:
             stitched_nev.write(f)
@@ -378,7 +390,7 @@ class StitchedChunks(dj.Computed):
             stitched_nsx = StitchedNsXFile(files, start=start_ts, end=end_ts, aggressive_concat=True)
             full_nsx_path = os.path.join(out_path, f'{task_name}.{filetype}')
             if os.path.exists(full_nsx_path):
-                print(f'Overwriting old output file: {full_nsx_path}')
+                print(f'\nOverwriting old output file: {full_nsx_path}')
                 os.remove(full_nsx_path)
             with open(full_nsx_path, 'wb+') as f:
                 stitched_nsx.write(f)
