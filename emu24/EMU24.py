@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import datajoint as dj
 import re
 import os
@@ -293,8 +295,8 @@ class StitchedChunks(dj.Computed):
     -> StartComments.proj('start_comment',start_fid='file_id',start_tid='task_id',start_chunk='chunk_id')
     -> StopComments.proj('stop_comment',stop_fid='file_id',stop_tid='task_id',stop_chunk='chunk_id')
     ---
-    start_filename: varchar(255)  # secondary attribute
-    stop_filename: varchar(255)  # secondary attribute
+    start_filename: varchar(256)  # secondary attribute
+    stop_filename: varchar(256)  # secondary attribute
     nev_file: filepath@Ext_Stitch
     ns3_file = NULL: filepath@Ext_Stitch
     ns5_file = NULL: filepath@Ext_Stitch
@@ -322,8 +324,9 @@ class StitchedChunks(dj.Computed):
         chunk_id = chunk_keys[-1]  # Chunk_id is last because of order of identifiers
 
         nsp_lookup = [f'{name}={value}' for name, value in zip(self.identifiers, chunk_keys)]
-        filename = (NSPChunks & ' AND '.join(nsp_lookup)).fetch1('file')
-        return filename, chunk_id
+        file_path = (NSPChunks & ' AND '.join(nsp_lookup)).fetch1('file')
+        file_name = Path(file_path).name
+        return file_name, chunk_id
 
     def make(self, key):
 
