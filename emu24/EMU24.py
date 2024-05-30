@@ -151,60 +151,57 @@ class TaskComments(dj.Computed):
     type: varchar(256)  
     """
 
+    comment_types = {
+        '$TASKID': 'TASKID',
+        '$TASKSTART': 'START',
+        '$TASKSTOP': 'STOP',
+        '$TASKKILL': 'KILL',
+        '$TASKERROR': 'ERROR',
+        '$TASKMETA': 'META',
+    }
+
     def make(self, key):
 
+        # Prepare an auto-incrementing counter to ensure each comment has a unique ID
         max_id = len(TaskComments())
-        # Get the file name
 
+        # Get the file name, and extract all the comments out of that file
         file = (NSPChunks & key).fetch1('nev_file')
         df = get_all_nev_comments([file])
+
+        # Special case for if there are no comments in this file, so it doesn't get re-computed every time
         if df.empty:
-            # Special case foe if there are no comments in this file, so it doesn't get re-computed every time
             max_id += 1
-            key['comment'] = "This chunk did not contain any comments"
-            key['type'] = 'NOCOMMENT'
-            key['timestamp'] = 0
             key['task_id'] = max_id
+            key['timestamp'] = 0
+            key['type'] = 'NOCOMMENT'
+            key['comment'] = "This chunk did not contain any comments"
             self.insert1(key)
-            print(f'Saved NOCOMMENTS for {file}')
+            print(f'Saved NOCOMMENT for {file}')
             return  # No need to continue here
-        else:
-            print(f'\n Found {len(df)} comments in {file}')
-        # Get all comments from the NEV file
-        pattern = '$TASK'
+
+        print(f'\n Found {len(df)} comment events in {file}')
+
+        # Get the subset of all comments that are special command comments
         comments = df['Data'].str
-        idx = comments.contains(pattern, regex=False)
+        idx = comments.contains('$', regex=False)
         matched_entries = df[idx]
+
+        # Ignore duplicate comments (NSP issue) even if their timestamps are different
         unique_comments = matched_entries.drop_duplicates(subset=matched_entries.columns.difference(['timestamp']))
 
         for index, row in unique_comments.iterrows():
-
-            if '$TASKID' in row['Data']:
-                key['comment'] = row['Data']
-                key['type'] = 'TASKID'
-            elif '$TASKSTART' in row['Data']:
-                key['comment'] = row['Data']
-                key['type'] = 'START'
-            elif '$TASKSTOP' in row['Data']:
-                key['comment'] = row['Data']
-                key['type'] = 'STOP'
-            elif '$TASKKILL' in row['Data']:
-                key['comment'] = row['Data']
-                key['type'] = 'KILL'
-            elif '$TASKERROR' in row['Data']:
-                key['comment'] = row['Data']
-                key['type'] = 'ERROR'
-            elif '$TASKMETA' in row['Data']:
-                key['comment'] = row['Data']
-                key['type'] = 'META'
-            else:
-                # This will throw an error if there are multiple of the same comment that are undefined
-                key['comment'] = row['Data']
-                key['comment_type'] = 'UNDEFINED'
-
             max_id += 1
-            key['timestamp'] = row['TimeStamps']
             key['task_id'] = max_id
+            key['timestamp'] = row['TimeStamps']
+            key['comment'] = row['Data']
+
+            # Extract the comment type out of the comment string and map it to a known comment type
+            raw_type = re.search(r'(\$[A-Z]) ', row['Data']).group(1)
+            try:
+                key['type'] = self.comment_types[raw_type]
+            except KeyError:
+                key['type'] = 'UNDEFINED'
 
             try:
                 self.insert1(key)
@@ -260,6 +257,7 @@ class TaskIDComments(dj.Computed):
         key['task_timestamp'] = timestamp
         key['emu_id'] = get_emu_id(comment)
 
+        # Endeavor to parse the name of the task being performed our of the comment payload
         task_match = re.search("task-(.*)_", comment)
         task_name = task_match.group(1) if task_match else 'UNKNOWN'
         key['task_name'] = task_name
