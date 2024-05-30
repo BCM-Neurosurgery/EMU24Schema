@@ -196,14 +196,14 @@ class TaskComments(dj.Computed):
             max_id += 1
             key['task_id'] = max_id
             key['timestamp'] = row['TimeStamps']
-            key['comment'] = row['Data']
 
-            # Extract the comment type out of the comment string and map it to a known comment type
-            raw_type = re.search(r'(\$[A-Z]) ', row['Data']).group(1)
+            # Extract the comment type and payload out of the comment string and map it to a known comment type
+            raw_type, payload = re.search(r'(\$[A-Z]) (.*)', row['Data']).groups()
             try:
                 key['type'] = self.comment_types[raw_type]
             except KeyError:
                 key['type'] = 'UNDEFINED'
+            key['comment'] = payload
 
             try:
                 self.insert1(key)
@@ -218,20 +218,20 @@ class StartComments(dj.Computed):
     -> TaskComments
     emu_id: int
     ---
-    start_comment: varchar(256) 
-    start_timestamp: bigint
+    comment: varchar(256) 
+    timestamp: bigint
     """
     key_source = TaskComments.proj(
         'type',
-        start_comment='comment',
-        start_timestamp='timestamp'
+        comment='comment',
+        timestamp='timestamp'
     ) & 'type = "START"'
 
     def make(self, key):
 
-        comment, timestamp = (self.key_source & key).fetch1('start_comment', 'start_timestamp')
-        key['start_comment'] = comment
-        key['start_timestamp'] = timestamp
+        comment, timestamp = (self.key_source & key).fetch1('comment', 'timestamp')
+        key['comment'] = comment
+        key['timestamp'] = timestamp
         key['emu_id'] = get_emu_id(comment)
 
         self.insert1(key)
@@ -243,9 +243,9 @@ class TaskIDComments(dj.Computed):
     -> TaskComments
     emu_id: int
     ---
-    task_comment: varchar(256)
-    task_timestamp: bigint
-    task_type: varchar(256)
+    comment: varchar(256)
+    timestamp: bigint
+    task_name: varchar(256)
     """
     key_source = TaskComments.proj(
         'type',
@@ -254,9 +254,9 @@ class TaskIDComments(dj.Computed):
     ) & 'type = "TASKID"'
 
     def make(self, key):
-        comment, timestamp = (self.key_source & key).fetch1('task_comment', 'task_timestamp')
-        key['task_comment'] = comment
-        key['task_timestamp'] = timestamp
+        comment, timestamp = (self.key_source & key).fetch1('comment', 'timestamp')
+        key['comment'] = comment
+        key['timestamp'] = timestamp
         key['emu_id'] = get_emu_id(comment)
 
         # Endeavor to parse the name of the task being performed our of the comment payload
@@ -271,19 +271,19 @@ class StopComments(dj.Computed):
     -> TaskComments
     emu_id: int
     ---
-    stop_comment: varchar(256)
-    stop_timestamp: bigint
+    comment: varchar(256)
+    timestamp: bigint
     """
     key_source = TaskComments.proj(
         'type',
-        task_comment='task_comment',
-        task_timestamp='timestamp'
+        comment='comment',
+        timestamp='timestamp'
     ) & ['type = "KILL"', 'type = "STOP"', 'type = "ERROR"']
 
     def make(self, key):
-        comment, timestamp = (self.key_source & key).fetch1('task_comment', 'task_timestamp')
-        key['stop_comment'] = comment
-        key['stop_timestamp'] = timestamp
+        comment, timestamp = (self.key_source & key).fetch1('comment', 'timestamp')
+        key['comment'] = comment
+        key['timestamp'] = timestamp
         key['emu_id'] = get_emu_id(comment)
 
         self.insert1(key)
@@ -302,8 +302,9 @@ class StitchedChunks(dj.Computed):
     ns5_file = NULL: filepath@Ext_Stitch
     """
     key_source = StartComments.proj(
-        'start_comment',
-        'start_timestamp',
+        'emu_id',
+        start_comment='comment',
+        start_timestamp='timestamp',
         start_fid='file_id',
         start_tid='task_id',
         start_chunk='chunk_id'
@@ -362,7 +363,7 @@ class StitchedChunks(dj.Computed):
 
         # Fetch any additional metadata needed for file naming
         patient = (Patient & f"patient_id='{key['patient_id']}'").fetch1('emu_id')
-        id_comments = (TaskComments & f"timestamp >= {start_ts} AND timestamp < {end_ts} AND comment_type='TASKID' AND nsp_id = {key['nsp_id']}").fetch()
+        id_comments = (TaskIDComments & f"timestamp >= {start_ts} AND timestamp < {end_ts} AND nsp_id = {key['nsp_id']}").fetch()
         if not len(id_comments):
             # No suitable task comments found, use a auto-generated name
             task_name = f"EMU-{key['emu_id']}_subj-{patient}_task-UNKNOWN_NSP-{key['nsp_id']}"
