@@ -303,28 +303,26 @@ class StitchedChunks(dj.Computed):
     """
     key_source = StartComments.proj(
         'emu_id',
-        start_comment='comment',
         start_timestamp='timestamp',
         start_fid='file_id',
         start_tid='task_id',
         start_chunk='chunk_id'
     ) * StopComments.proj(
-        'stop_comment',
-        'stop_timestamp',
+        stop_timestamp='timestamp',
         stop_fid='file_id',
         stop_tid='task_id',
         stop_chunk='chunk_id'
     )
-    identifiers = ['patient_id', 'admission_id', 'toc_id', 'nsp_id', 'chunk_id']
+    chunk_identifiers = ['patient_id', 'admission_id', 'toc_id', 'nsp_id', 'chunk_id']
     output = '/mnt/lake-database/stitched'
 
     def file_lookup(self, key, task_id_col):
-        """Lookup the file that a task"""
+        """Lookup the file that a task is contained within"""
         task_id = (self.key_source & key).fetch1(task_id_col)
-        chunk_keys = (TaskComments & f"task_id={task_id}").fetch1(*self.identifiers)
+        chunk_keys = (TaskComments & f"task_id={task_id}").fetch1(*self.chunk_identifiers)
         chunk_id = chunk_keys[-1]  # Chunk_id is last because of order of identifiers
 
-        nsp_lookup = [f'{name}={value}' for name, value in zip(self.identifiers, chunk_keys)]
+        nsp_lookup = [f'{name}={value}' for name, value in zip(self.chunk_identifiers, chunk_keys)]
         file_path = (NSPChunks & ' AND '.join(nsp_lookup)).fetch1('file')
         file_name = Path(file_path).name
         return file_name, chunk_id
@@ -346,7 +344,7 @@ class StitchedChunks(dj.Computed):
         start_ts = (self.key_source & key).fetch1('start_timestamp')
         end_ts = (self.key_source & key).fetch1('stop_timestamp')
 
-        # Determine the range of missing values and generate the missing files
+        # Determine the range of missing values and generate the missing filenames
         all_chunks = list(range(start_chunk, stop_chunk + 1))
         all_files = [f'{start_file[:-3]}{str(num).zfill(3)}' for num in all_chunks]
 
