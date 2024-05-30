@@ -361,13 +361,18 @@ class StitchedChunks(dj.Computed):
 
         # Fetch any additional metadata needed for file naming
         patient = (Patient & f"patient_id='{key['patient_id']}'").fetch1('emu_id')
-        id_comments = (TaskIDComments & f"timestamp >= {start_ts} AND timestamp < {end_ts} AND nsp_id = {key['nsp_id']}").fetch()
-        if not len(id_comments):
+        id_comments = (
+                TaskIDComments &
+                f"emu_id = {key['emu_id']} "
+                f"AND nsp_id = {key['nsp_id']}"
+                f"AND patient_id = {key['patient_id']}"
+        ).fetch()
+        if len(id_comments):
+            # Use the first TASKID comment payload to generate a name
+            task_name = id_comments[0]['comment']
+        else:
             # No suitable task comments found, use a auto-generated name
             task_name = f"EMU-{key['emu_id']}_subj-{patient}_task-UNKNOWN_NSP-{key['nsp_id']}"
-        else:
-            # Use the first task comment ot generate a name
-            task_name = id_comments[0]['task_comment'].split(' ')[-1]
 
         folder_name = '-'.join(task_name.split('_NSP-')[:-1])   # Drop the NSP id for the folder name
         out_path = os.path.join(self.output, patient, folder_name)
