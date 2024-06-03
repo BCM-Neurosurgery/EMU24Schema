@@ -146,7 +146,7 @@ class NSPChunks(dj.Computed):
 class TaskComments(dj.Computed):
     definition = """
     -> NSPChunks
-    task_id: int  # primary key
+    comment_id: int  # primary key
     ---
     comment: varchar(256)  
     timestamp: bigint 
@@ -174,7 +174,7 @@ class TaskComments(dj.Computed):
         # Special case for if there are no comments in this file, so it doesn't get re-computed every time
         if df.empty:
             max_id += 1
-            key['task_id'] = max_id
+            key['comment_id'] = max_id
             key['timestamp'] = 0
             key['type'] = 'NOCOMMENT'
             key['comment'] = "This chunk did not contain any comments"
@@ -194,7 +194,7 @@ class TaskComments(dj.Computed):
 
         for index, row in unique_comments.iterrows():
             max_id += 1
-            key['task_id'] = max_id
+            key['comment_id'] = max_id
             key['timestamp'] = row['TimeStamps']
 
             # Extract the comment type and payload out of the comment string and map it to a known comment type
@@ -292,8 +292,8 @@ class StopComments(dj.Computed):
 @schema
 class StitchedChunks(dj.Computed):
     definition = """
-    -> StartComments.proj('start_comment',start_fid='file_id',start_tid='task_id',start_chunk='chunk_id')
-    -> StopComments.proj('stop_comment',stop_fid='file_id',stop_tid='task_id',stop_chunk='chunk_id')
+    -> StartComments.proj('start_comment',start_fid='file_id',start_tid='comment_id',start_chunk='chunk_id')
+    -> StopComments.proj('stop_comment',stop_fid='file_id',stop_tid='comment_id',stop_chunk='chunk_id')
     ---
     start_filename: varchar(256)  # secondary attribute
     stop_filename: varchar(256)  # secondary attribute
@@ -305,21 +305,21 @@ class StitchedChunks(dj.Computed):
         'emu_id',
         start_timestamp='timestamp',
         start_fid='file_id',
-        start_tid='task_id',
+        start_tid='comment_id',
         start_chunk='chunk_id'
     ) * StopComments.proj(
         stop_timestamp='timestamp',
         stop_fid='file_id',
-        stop_tid='task_id',
+        stop_tid='comment_id',
         stop_chunk='chunk_id'
     )
     chunk_identifiers = ['patient_id', 'admission_id', 'toc_id', 'nsp_id', 'chunk_id']
     output = '/mnt/lake-database/stitched'
 
-    def file_lookup(self, key, task_id_col):
+    def file_lookup(self, key, comment_id_col):
         """Lookup the file that a task is contained within"""
-        task_id = (self.key_source & key).fetch1(task_id_col)
-        chunk_keys = (TaskComments & f"task_id={task_id}").fetch1(*self.chunk_identifiers)
+        comment_id = (self.key_source & key).fetch1(comment_id_col)
+        chunk_keys = (TaskComments & f"comment_id={comment_id}").fetch1(*self.chunk_identifiers)
         chunk_id = chunk_keys[-1]  # Chunk_id is last because of order of identifiers
 
         nsp_lookup = [f'{name}={value}' for name, value in zip(self.chunk_identifiers, chunk_keys)]
