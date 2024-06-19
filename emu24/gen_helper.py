@@ -8,17 +8,21 @@ parser.add_argument('-u', '--username', required=False)
 parser.add_argument('-p', '--password', required=False)
 parser.add_argument('-m', '--mode', default="dev")
 args = parser.parse_args()
-print('Here')
+
+global database_name
 
 if args.username and args.password:
+    print(f'Using username and password...')
     dj.config['database.user'] = args.username
     dj.config['database.password'] = args.password
 
 dj.config['database.host'] = 'localhost'
 dj.config['database.port'] = 3306
 
+print(f'Setting database mode to {args.mode}')
 # Run DataJoint in Development mode: for fast local testing and debugging
 if args.mode == 'dev':
+    database_name = 'emu24_stitch_dev'
     dj.config['safemode'] = False
     dj.config['stores'] = {
         "Ext_Chunk": {
@@ -35,6 +39,7 @@ if args.mode == 'dev':
 
 # Run DataJoint in deploy mode: for initial deployment to the production server but not yet modifying real data
 elif args.mode == 'deploy':
+    database_name = 'emu24_stitch_deploy'
     dj.config['safemode'] = False
     dj.config['stores'] = {
         "Ext_Chunk": {
@@ -51,6 +56,8 @@ elif args.mode == 'deploy':
 
 # Run DataJoint in production mode: for true real running conditions
 elif args.mode == 'prod':
+    database_name = 'emu24_stitch'
+    dj.config['safemode'] = True
     dj.config['stores'] = {
         "Ext_Chunk": {
             "protocol": "file",
@@ -66,6 +73,7 @@ elif args.mode == 'prod':
 else:
     raise KeyError("Unknown mode! Must be 'dev', 'prod' or 'deploy'")
 
+print(f'Connecting...')
 dj.conn()
 
 print('Importing schema...')

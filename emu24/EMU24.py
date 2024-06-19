@@ -8,6 +8,8 @@ from brpylib import NsxFile
 from pyNsXStitch.stitchers import StitchedNeVFile, StitchedNsXFile
 from pyNsXStitch.helpers import get_all_nev_comments
 
+global database_name
+
 
 def get_emu_id(comment_text):
     """
@@ -21,7 +23,7 @@ def get_emu_id(comment_text):
 
 
 # Define the schema
-schema = dj.schema('emu24_stitch')
+schema = dj.schema(database_name)
 
 print('Testing updates')
 
