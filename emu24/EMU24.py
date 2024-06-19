@@ -3,12 +3,10 @@ from pathlib import Path
 import datajoint as dj
 import re
 import os
-
+from settings import DATABASE_NAME
 from brpylib import NsxFile
 from pyNsXStitch.stitchers import StitchedNeVFile, StitchedNsXFile
 from pyNsXStitch.helpers import get_all_nev_comments
-
-global database_name
 
 
 def get_emu_id(comment_text):
@@ -23,9 +21,7 @@ def get_emu_id(comment_text):
 
 
 # Define the schema
-schema = dj.schema(database_name)
-
-print('Testing updates')
+schema = dj.schema(DATABASE_NAME)
 
 
 # Define the tables
@@ -294,8 +290,8 @@ class StopComments(dj.Computed):
 @schema
 class StitchedChunks(dj.Computed):
     definition = """
-    -> StartComments.proj('start_comment',start_fid='file_id',start_tid='comment_id',start_chunk='chunk_id')
-    -> StopComments.proj('stop_comment',stop_fid='file_id',stop_tid='comment_id',stop_chunk='chunk_id')
+    -> StartComments.proj('comment',start_fid='file_id',start_tid='comment_id',start_chunk='chunk_id')
+    -> StopComments.proj('comment',stop_fid='file_id',stop_tid='comment_id',stop_chunk='chunk_id')
     ---
     start_filename: varchar(256)  # secondary attribute
     stop_filename: varchar(256)  # secondary attribute
