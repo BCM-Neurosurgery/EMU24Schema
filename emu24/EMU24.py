@@ -21,7 +21,7 @@ def get_emu_id(comment_text):
 
 
 # Define the schema
-schema = dj.schema('paulsteffan_EMU24')
+schema = dj.schema('emu24_stitch')
 
 print('Testing updates')
 
