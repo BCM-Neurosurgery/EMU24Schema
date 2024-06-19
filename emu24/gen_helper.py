@@ -2,76 +2,25 @@
 
 import argparse
 import datajoint as dj
+import settings
+
+print(f'Using settings for the {settings.environment} environment...')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-u', '--username', required=False)
 parser.add_argument('-p', '--password', required=False)
-parser.add_argument('-m', '--mode', default="dev")
+
 args = parser.parse_args()
 
-global database_name
-
 if args.username and args.password:
-    print(f'Using username and password...')
+    print(f'Using the given username and password...')
     dj.config['database.user'] = args.username
     dj.config['database.password'] = args.password
 
-dj.config['database.host'] = 'localhost'
-dj.config['database.port'] = 3306
-
-print(f'Setting database mode to {args.mode}')
-# Run DataJoint in Development mode: for fast local testing and debugging
-if args.mode == 'dev':
-    database_name = 'emu24_stitch_dev'
-    dj.config['safemode'] = False
-    dj.config['stores'] = {
-        "Ext_Chunk": {
-            "protocol": "file",
-            "location": "data/datalake/data/emu/",
-            "stage": "data/datalake/data/emu/"
-        },
-        "Ext_Stitch": {
-            "protocol": "file",
-            "location": "/mnt/lake-database/new-stitched",
-            "stage": "/mnt/lake-database/new-stitched"
-        }
-    }
-
-# Run DataJoint in deploy mode: for initial deployment to the production server but not yet modifying real data
-elif args.mode == 'deploy':
-    database_name = 'emu24_stitch_deploy'
-    dj.config['safemode'] = False
-    dj.config['stores'] = {
-        "Ext_Chunk": {
-            "protocol": "file",
-            "location": "/mnt/datalake/test/emu/",
-            "stage": "/mnt/datalake/test/emu/"
-        },
-        "Ext_Stitch": {
-            "protocol": "file",
-            "location": "/mnt/lake-database/test-stitched",
-            "stage": "/mnt/lake-database/test-stitched"
-        }
-    }
-
-# Run DataJoint in production mode: for true real running conditions
-elif args.mode == 'prod':
-    database_name = 'emu24_stitch'
-    dj.config['safemode'] = True
-    dj.config['stores'] = {
-        "Ext_Chunk": {
-            "protocol": "file",
-            "location": "/mnt/datalake/data/emu/",
-            "stage": "/mnt/datalake/data/emu/"
-        },
-        "Ext_Stitch": {
-            "protocol": "file",
-            "location": "/mnt/lake-database/new-stitched",
-            "stage": "/mnt/lake-database/new-stitched"
-        }
-    }
-else:
-    raise KeyError("Unknown mode! Must be 'dev', 'prod' or 'deploy'")
+dj.config['database.host'] = settings.DJ_DATABASE_HOST
+dj.config['database.port'] = settings.DJ_DATABASE_PORT
+dj.config['safemode'] = settings.DJ_CONFIG_SAFEMODE
+dj.config['stores'] = settings.DJ_CONFIG_STORES
 
 print(f'Connecting...')
 dj.conn()
