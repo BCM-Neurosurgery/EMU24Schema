@@ -26,6 +26,6 @@ print(f'Connecting...')
 dj.conn()
 
 print('Importing schema...')
-from emu24.schema import *
+from schema import *
 
 
