@@ -15,7 +15,7 @@ def get_emu_id(comment_text):
 
     All comments linked to a task contain an EMU ID in the form 'EMU-####'
     """
-    emu_match = re.search(" EMU-(.*?)", comment_text)
+    emu_match = re.search("EMU-([0-9]+)", comment_text)
     emu_id = int(emu_match.group(1), 10) if emu_match else 99999
     return emu_id
 
@@ -121,10 +121,11 @@ class NSPChunks(dj.Computed):
         # Load headers either from ns3 or ns5
         if key_dict['ns3_file'] is not None:
             nsx_fileobj = NsxFile(key_dict['ns3_file'])
-            key['file'] = key_dict['ns3_file'][:-4]
+            file_path = key_dict['ns3_file'][:-4]
         else:
             nsx_fileobj = NsxFile(key_dict['ns5_file'])
-            key['file'] = key_dict['ns5_file'][:-4]
+            file_path = key_dict['ns5_file'][:-4]
+        key['file'] = Path(file_path).parts[-1]
 
         # Extract the absolute time
         header = nsx_fileobj.basic_header
@@ -362,7 +363,7 @@ class StitchedChunks(dj.Computed):
         id_comments = (
                 TaskIDComments &
                 f"emu_id = {key['emu_id']} "
-                f"AND nsp_id = {key['nsp_id']}"
+                f"AND nsp_id = {key['nsp_id']} "
                 f"AND patient_id = {key['patient_id']}"
         ).fetch()
         if len(id_comments):
