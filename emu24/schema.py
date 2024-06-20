@@ -196,7 +196,7 @@ class TaskComments(dj.Computed):
             key['timestamp'] = row['TimeStamps']
 
             # Extract the comment type and payload out of the comment string and map it to a known comment type
-            raw_type, payload = re.search(r'(\$[A-Z]) (.*)', row['Data']).groups()
+            raw_type, payload = re.search(r'(\$[A-Z]+) (.*)', row['Data']).groups()
             try:
                 key['type'] = self.comment_types[raw_type]
             except KeyError:
