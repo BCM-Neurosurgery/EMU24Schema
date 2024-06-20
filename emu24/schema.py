@@ -3,7 +3,7 @@ from pathlib import Path
 import datajoint as dj
 import re
 import os
-from settings import DATABASE_NAME
+from emu24.settings import DATABASE_NAME
 from brpylib import NsxFile
 from pyNsXStitch.stitchers import StitchedNeVFile, StitchedNsXFile
 from pyNsXStitch.helpers import get_all_nev_comments
