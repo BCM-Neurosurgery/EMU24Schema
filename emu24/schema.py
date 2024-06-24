@@ -3,7 +3,7 @@ from pathlib import Path
 import datajoint as dj
 import re
 import os
-from emu24.settings import DATABASE_NAME
+from emu24.settings import DATABASE_NAME, STITCHED_PATH
 from brpylib import NsxFile
 from pyNsXStitch.stitchers import StitchedNeVFile, StitchedNsXFile
 from pyNsXStitch.helpers import get_all_nev_comments
@@ -313,7 +313,7 @@ class StitchedChunks(dj.Computed):
         stop_chunk='chunk_id'
     )
     chunk_identifiers = ['patient_id', 'admission_id', 'toc_id', 'nsp_id', 'chunk_id']
-    output = '/mnt/lake-database/stitched'
+    output = STITCHED_PATH
 
     def file_lookup(self, key, comment_id_col):
         """Lookup the file that a task is contained within"""
