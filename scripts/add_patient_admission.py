@@ -1,4 +1,4 @@
-from emu24.gen_helper import *
+from emu24.helper import *
 
 
 def make_admission(patient_pk):

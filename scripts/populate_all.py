@@ -1,4 +1,4 @@
-from emu24.gen_helper import *
+from emu24.helper import *
 
 print('Collecting matching NSP data chunks...')
 NSPChunks().populate(display_progress=True)

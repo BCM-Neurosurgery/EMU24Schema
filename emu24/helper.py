@@ -2,7 +2,7 @@
 
 import argparse
 import datajoint as dj
-import settings
+from emu24 import settings
 
 print(f'Using settings for the {settings.environment} environment...')
 
@@ -26,6 +26,6 @@ print(f'Connecting...')
 dj.conn()
 
 print('Importing schema...')
-from schema import *
+from emu24.schema import *
 
 

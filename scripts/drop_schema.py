@@ -1,4 +1,4 @@
-from gen_helper import *
+from emu24.helper import *
 
 if settings.environment != 'prod':
 
