@@ -248,8 +248,8 @@ class TaskIDComments(dj.Computed):
     """
     key_source = TaskComments.proj(
         'type',
-        task_comment='comment',
-        task_timestamp='timestamp'
+        comment='comment',
+        timestamp='timestamp'
     ) & 'type = "TASKID"'
 
     def make(self, key):
@@ -259,9 +259,11 @@ class TaskIDComments(dj.Computed):
         key['emu_id'] = get_emu_id(comment)
 
         # Endeavor to parse the name of the task being performed our of the comment payload
-        task_match = re.search("task-(.*)_", comment)
+        task_match = re.search("task-([a-zA-Z-0-9-]*)_", comment)
         task_name = task_match.group(1) if task_match else 'UNKNOWN'
         key['task_name'] = task_name
+
+        self.insert1(key)
 
 
 @schema
