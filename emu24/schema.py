@@ -161,6 +161,21 @@ class TaskComments(dj.Computed):
         '$TASKMETA': 'META',
     }
 
+    def save_empty(self, max_id, key, file, reason=None):
+        """
+        Save a indicator that this chunk did not have any meaningful comments
+
+        This is important to make sure the chunk is removed from the key source and we don't re-run the make
+        function for this chunk every time we run populate()
+        """
+        reason = "This chunk did not contain any comments" if reason is None else reason
+        key['comment_id'] = max_id
+        key['timestamp'] = 0
+        key['type'] = 'NOCOMMENT'
+        key['comment'] = reason
+        self.insert1(key)
+        print(f'Saved NOCOMMENT for {file}')
+
     def make(self, key):
 
         # Prepare an auto-incrementing counter to ensure each comment has a unique ID
@@ -170,15 +185,10 @@ class TaskComments(dj.Computed):
         file = (NSPChunks & key).fetch1('nev_file')
         df = get_all_nev_comments([file])
 
-        # Special case for if there are no comments in this file, so it doesn't get re-computed every time
+        # Check special case for if there are no comments in this file at all
         if df.empty:
             max_id += 1
-            key['comment_id'] = max_id
-            key['timestamp'] = 0
-            key['type'] = 'NOCOMMENT'
-            key['comment'] = "This chunk did not contain any comments"
-            self.insert1(key)
-            print(f'Saved NOCOMMENT for {file}')
+            self.save_empty(max_id, key, file)
             return  # No need to continue here
 
         print(f'\n Found {len(df)} comment events in {file}')
@@ -187,6 +197,12 @@ class TaskComments(dj.Computed):
         comments = df['Data'].str
         idx = comments.contains('$', regex=False)
         matched_entries = df[idx]
+
+        # Check special case for if there are comments but no $TASK... style comments in this file
+        if matched_entries.empty:
+            max_id += 1
+            self.save_empty(max_id, key, file, reason='No valid task comment commands in this file')
+            return  # No need to continue here
 
         # Ignore duplicate comments (NSP issue) even if their timestamps are different
         unique_comments = matched_entries.drop_duplicates(subset=matched_entries.columns.difference(['timestamp']))
