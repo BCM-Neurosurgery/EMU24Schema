@@ -3,6 +3,7 @@ from pathlib import Path
 import datajoint as dj
 import re
 import os
+import warnings
 from emu24.settings import DATABASE_NAME, STITCHED_PATH
 from brpylib import NsxFile
 from pyNsXStitch.stitchers import StitchedNeVFile, StitchedNsXFile
@@ -413,7 +414,10 @@ class StitchedChunks(dj.Computed):
             full_nsx_path = os.path.join(out_path, f'{task_name}.{filetype}')
             if os.path.exists(full_nsx_path):
                 print(f'\nOverwriting old output file: {full_nsx_path}')
-                os.remove(full_nsx_path)
+                try:
+                    os.remove(full_nsx_path)
+                except FileNotFoundError:
+                    raise warnings.warn('File did not exist!')
             with open(full_nsx_path, 'wb+') as f:
                 stitched_nsx.write(f)
             key[f'{filetype}_file'] = full_nsx_path
