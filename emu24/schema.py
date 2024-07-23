@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import datajoint as dj
@@ -432,6 +433,8 @@ class StitchedChunks(dj.Computed):
 
             now = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
             with open(os.path.join(out_path, f'error-{now}.txt'), 'w') as f:
+                f.write('Error occured when processing:  ')
+                f.write(json.dumps(key, indent=2))
                 f.writelines(exception_info)
 
             warnings.warn("\n".join(exception_info))
