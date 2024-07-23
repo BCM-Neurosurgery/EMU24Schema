@@ -345,6 +345,33 @@ class StitchedChunks(dj.Computed):
         file_name = Path(file_path).name
         return file_name, chunk_id
 
+    def do_stitching(self, out_path, all_nevs, all_nsxs, task_name, start_ts, end_ts):
+        # Stitch the NEV files
+        stitched_nev = StitchedNeVFile(all_nevs, start=start_ts, end=end_ts)
+        full_nev_path = os.path.join(out_path, f'{task_name}.nev')
+        if os.path.exists(full_nev_path):
+            print(f'\nOverwriting old output file: {full_nev_path}')
+            os.remove(full_nev_path)
+        with open(full_nev_path, 'wb') as f:
+            stitched_nev.write(f)
+
+        # Stitch and save the locations of the NSX files
+        for filetype, files in all_nsxs.items():
+            if not files:
+                continue  # Skip filetypes that we don't have
+            stitched_nsx = StitchedNsXFile(files, start=start_ts, end=end_ts, aggressive_concat=True)
+            full_nsx_path = os.path.join(out_path, f'{task_name}.{filetype}')
+            if os.path.exists(full_nsx_path):
+                print(f'\nOverwriting old output file: {full_nsx_path}')
+                try:
+                    os.remove(full_nsx_path)
+                except FileNotFoundError:
+                    raise warnings.warn('File did not exist!')
+            with open(full_nsx_path, 'wb+') as f:
+                stitched_nsx.write(f)
+
+        return full_nev_path, full_nsx_path
+
     def make(self, key):
 
         print(key)
@@ -396,31 +423,18 @@ class StitchedChunks(dj.Computed):
         out_path = os.path.join(self.output, patient, folder_name)
         os.makedirs(out_path, exist_ok=True)
 
-        # Stitch the NEV files
-        stitched_nev = StitchedNeVFile(all_nevs, start=start_ts, end=end_ts)
-        full_nev_path = os.path.join(out_path, f'{task_name}.nev')
-        if os.path.exists(full_nev_path):
-            print(f'\nOverwriting old output file: {full_nev_path}')
-            os.remove(full_nev_path)
-        with open(full_nev_path, 'wb') as f:
-            stitched_nev.write(f)
-        key['nev_file'] = full_nev_path
+        try:
+            self.do_stitching(out_path, all_nevs, all_nsxs, task_name, start_ts, end_ts)
+        except Exception as e:
+            import sys, traceback, datetime, warnings
+            exc_info = sys.exc_info()
+            exception_info = traceback.format_exception(*exc_info)
 
-        # Stitch and save the locations of the NSX files
-        for filetype, files in all_nsxs.items():
-            if not files:
-                continue  # Skip filetypes that we don't have
-            stitched_nsx = StitchedNsXFile(files, start=start_ts, end=end_ts, aggressive_concat=True)
-            full_nsx_path = os.path.join(out_path, f'{task_name}.{filetype}')
-            if os.path.exists(full_nsx_path):
-                print(f'\nOverwriting old output file: {full_nsx_path}')
-                try:
-                    os.remove(full_nsx_path)
-                except FileNotFoundError:
-                    raise warnings.warn('File did not exist!')
-            with open(full_nsx_path, 'wb+') as f:
-                stitched_nsx.write(f)
-            key[f'{filetype}_file'] = full_nsx_path
+            now = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            with open(os.path.join(out_path, f'error-{now}.txt'), 'w') as f:
+                f.writelines(exception_info)
+
+            warnings.warn("\n".join(exception_info))
 
         try:
             self.insert1(key)
