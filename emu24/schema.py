@@ -346,7 +346,8 @@ class StitchedChunks(dj.Computed):
         file_name = Path(file_path).name
         return file_name, chunk_id
 
-    def do_stitching(self, out_path, all_nevs, all_nsxs, task_name, start_ts, end_ts):
+    @staticmethod
+    def do_stitching(key, out_path, all_nevs, all_nsxs, task_name, start_ts, end_ts):
         # Stitch the NEV files
         stitched_nev = StitchedNeVFile(all_nevs, start=start_ts, end=end_ts)
         full_nev_path = os.path.join(out_path, f'{task_name}.nev')
@@ -355,6 +356,7 @@ class StitchedChunks(dj.Computed):
             os.remove(full_nev_path)
         with open(full_nev_path, 'wb') as f:
             stitched_nev.write(f)
+        key['nev_file'] = full_nev_path
 
         # Stitch and save the locations of the NSX files
         for filetype, files in all_nsxs.items():
@@ -370,8 +372,9 @@ class StitchedChunks(dj.Computed):
                     raise warnings.warn('File did not exist!')
             with open(full_nsx_path, 'wb+') as f:
                 stitched_nsx.write(f)
+            key[f'{filetype}_file'] = full_nsx_path
 
-        return full_nev_path, full_nsx_path
+        return key
 
     def make(self, key):
 
@@ -425,7 +428,7 @@ class StitchedChunks(dj.Computed):
         os.makedirs(out_path, exist_ok=True)
 
         try:
-            self.do_stitching(out_path, all_nevs, all_nsxs, task_name, start_ts, end_ts)
+            key = self.do_stitching(key, out_path, all_nevs, all_nsxs, task_name, start_ts, end_ts)
         except Exception as e:
             import sys, traceback, datetime, warnings
             exc_info = sys.exc_info()
