@@ -443,6 +443,6 @@ class StitchedChunks(dj.Computed):
             warnings.warn("\n".join(exception_info))
 
         try:
-            self.insert1(key)
+            self.insert1(key, replace=True)
         except dj.DataJointError as e:
             print(e)
