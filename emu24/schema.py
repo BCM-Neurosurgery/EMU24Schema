@@ -9,7 +9,15 @@ from emu24.settings import DATABASE_NAME, STITCHED_PATH
 from brpylib import NsxFile
 from pyNsXStitch.stitchers import StitchedNeVFile, StitchedNsXFile
 from pyNsXStitch.helpers import get_all_nev_comments
+import logging
 
+# Configure logging
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s - %(levelname)s - %(message)s',
+                    handlers=[
+                        logging.FileHandler("/home/auto/CODE/emu/EMU24Schema/scripts/datajoint_computed_table.log"),
+                        logging.StreamHandler()
+                    ])
 
 def get_emu_id(comment_text):
     """
@@ -104,43 +112,66 @@ class NSPChunks(dj.Computed):
     key_source = NS3Chunks + NS5Chunks
 
     def make(self, key):
-        source = self.key_source
+        try:
+            source = self.key_source
 
-        key_dict = (source & key).fetch1()
+            # Debugging key source
+            print(f"Key Source: {source}")
+            print(f"Key: {key}")
 
-        # Get all the primary keys to look up the correct NeV file
-        patient, admission = key_dict['patient_id'], key_dict['admission_id']
-        toc, nsp, chunk = key_dict['toc_id'], key_dict['nsp_id'], key_dict['chunk_id']
-        query = NEVChunks & (
-            f"patient_id={patient} "
-            f"AND admission_id={admission} "
-            f"AND toc_id={toc} "
-            f"AND nsp_id={nsp} "
-            f"AND chunk_id={chunk}"
-        )
-        nev_file = query.fetch1('nev_file')
+            key_dict = (source & key).fetch1()
+            print(f"key_dict: {key_dict}")
 
-        # Load headers either from ns3 or ns5
-        if key_dict['ns3_file'] is not None:
-            nsx_fileobj = NsxFile(key_dict['ns3_file'])
-            file_path = key_dict['ns3_file'][:-4]
-        else:
-            nsx_fileobj = NsxFile(key_dict['ns5_file'])
-            file_path = key_dict['ns5_file'][:-4]
-        key['file'] = Path(file_path).parts[-1]
+            limited_nev_entries = (NEVChunks & key).fetch(limit=10, as_dict=True)
+            print(f"Limited entries in NEVChunks: {limited_nev_entries}")
 
-        # Extract the absolute time
-        header = nsx_fileobj.basic_header
-        key['absolute_time'] = str(header['TimeOrigin'])
+            limited_ns5_entries = (NS5Chunks & key).fetch(limit=10, as_dict=True)
+            print(f"Limited entries in NS5Chunks: {limited_ns5_entries}")
 
-        key['nev_file'] = nev_file
-        if key_dict['ns3_file'] is not None:
-            key['ns3_file'] = key_dict['ns3_file']
-        if key_dict['ns5_file'] is not None:
-            key['ns5_file'] = key_dict['ns5_file']
+            limited_ns3_entries = (NS3Chunks & key).fetch(limit=10, as_dict=True)
+            print(f"Limited entries in NS3Chunks: {limited_ns3_entries}")
 
-        # Insert into database
-        self.insert1(key)
+            # Get all the primary keys to look up the correct NeV file
+            patient, admission = key_dict['patient_id'], key_dict['admission_id']
+            toc, nsp, chunk = key_dict['toc_id'], key_dict['nsp_id'], key_dict['chunk_id']
+            query = NEVChunks & (
+                f"patient_id={patient} "
+                f"AND admission_id={admission} "
+                f"AND toc_id={toc} "
+                f"AND nsp_id={nsp} "
+                f"AND chunk_id={chunk}"
+            )
+
+            print(f"query result: {query.fetch(as_dict=True)}")
+
+            nev_file = query.fetch1('nev_file')
+
+            # Load headers either from ns3 or ns5
+            if key_dict['ns3_file'] is not None:
+                nsx_fileobj = NsxFile(key_dict['ns3_file'])
+                file_path = key_dict['ns3_file'][:-4]
+            else:
+                nsx_fileobj = NsxFile(key_dict['ns5_file'])
+                file_path = key_dict['ns5_file'][:-4]
+            key['file'] = Path(file_path).parts[-1]
+
+            # Extract the absolute time
+            header = nsx_fileobj.basic_header
+            key['absolute_time'] = str(header['TimeOrigin'])
+
+            key['nev_file'] = nev_file
+            if key_dict['ns3_file'] is not None:
+                key['ns3_file'] = key_dict['ns3_file']
+            if key_dict['ns5_file'] is not None:
+                key['ns5_file'] = key_dict['ns5_file']
+
+            # Insert into database
+            self.insert1(key)
+        except dj.DataJointError as e:
+            print(f"Failed to insert key {key}: {e}")
+            with open('populate_errors.log', 'a') as f:
+                f.write(f"Failed to insert key {key}: {e}\n")
+
 
 
 @schema
