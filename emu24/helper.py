@@ -14,8 +14,8 @@ login_parser.add_argument('-u', '--username', required=False)
 login_parser.add_argument('-p', '--password', required=False)
 
 
-def connect(cmd_line_args):
-    if cmd_line_args.username and cmd_line_args.password:
+def connect(cmd_line_args=None):
+    if cmd_line_args and cmd_line_args.username and cmd_line_args.password:
         print(f'Using the given username and password...')
         dj.config['database.user'] = cmd_line_args.username
         dj.config['database.password'] = cmd_line_args.password
