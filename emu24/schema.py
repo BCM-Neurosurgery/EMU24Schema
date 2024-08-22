@@ -116,20 +116,7 @@ class NSPChunks(dj.Computed):
             source = self.key_source
 
             # Debugging key source
-            print(f"Key Source: {source}")
-            print(f"Key: {key}")
-
             key_dict = (source & key).fetch1()
-            print(f"key_dict: {key_dict}")
-
-            limited_nev_entries = (NEVChunks & key).fetch(limit=10, as_dict=True)
-            print(f"Limited entries in NEVChunks: {limited_nev_entries}")
-
-            limited_ns5_entries = (NS5Chunks & key).fetch(limit=10, as_dict=True)
-            print(f"Limited entries in NS5Chunks: {limited_ns5_entries}")
-
-            limited_ns3_entries = (NS3Chunks & key).fetch(limit=10, as_dict=True)
-            print(f"Limited entries in NS3Chunks: {limited_ns3_entries}")
 
             # Get all the primary keys to look up the correct NeV file
             patient, admission = key_dict['patient_id'], key_dict['admission_id']
@@ -141,8 +128,6 @@ class NSPChunks(dj.Computed):
                 f"AND nsp_id={nsp} "
                 f"AND chunk_id={chunk}"
             )
-
-            print(f"query result: {query.fetch(as_dict=True)}")
 
             nev_file = query.fetch1('nev_file')
 
@@ -171,7 +156,6 @@ class NSPChunks(dj.Computed):
             print(f"Failed to insert key {key}: {e}")
             with open('populate_errors.log', 'a') as f:
                 f.write(f"Failed to insert key {key}: {e}\n")
-
 
 
 @schema
@@ -328,7 +312,7 @@ class StopComments(dj.Computed):
         'type',
         comment='comment',
         timestamp='timestamp'
-    ) & ['type = "KILL"', 'type = "STOP"', 'type = "ERROR"']
+    ) & ['type = "KILL"', 'type = "STOP"', 'type = "ERR"']
 
     def make(self, key):
         comment, timestamp = (self.key_source & key).fetch1('comment', 'timestamp')
@@ -461,7 +445,7 @@ class StitchedChunks(dj.Computed):
         try:
             key = self.do_stitching(key, out_path, all_nevs, all_nsxs, task_name, start_ts, end_ts)
         except Exception as e:
-            import sys, traceback, datetime, warnings
+            import sys, traceback, datetime
             exc_info = sys.exc_info()
             exception_info = traceback.format_exception(*exc_info)
 
@@ -476,4 +460,4 @@ class StitchedChunks(dj.Computed):
         try:
             self.insert1(key, replace=True)
         except dj.DataJointError as e:
-            print(e)
+            warnings.warn(str(e))
