@@ -6,26 +6,33 @@ from emu24 import settings
 
 print(f'Using settings for the {settings.environment} environment...')
 
-parser = argparse.ArgumentParser()
-parser.add_argument('-u', '--username', required=False)
-parser.add_argument('-p', '--password', required=False)
+username = None
+password = None
 
-args = parser.parse_args()
+login_parser = argparse.ArgumentParser()
+login_parser.add_argument('-u', '--username', required=False)
+login_parser.add_argument('-p', '--password', required=False)
 
-if args.username and args.password:
-    print(f'Using the given username and password...')
-    dj.config['database.user'] = args.username
-    dj.config['database.password'] = args.password
 
-dj.config['database.host'] = settings.DJ_DATABASE_HOST
-dj.config['database.port'] = settings.DJ_DATABASE_PORT
-dj.config['safemode'] = settings.DJ_CONFIG_SAFEMODE
-dj.config['stores'] = settings.DJ_CONFIG_STORES
+def connect(cmd_line_args):
+    if cmd_line_args.username and cmd_line_args.password:
+        print(f'Using the given username and password...')
+        dj.config['database.user'] = cmd_line_args.username
+        dj.config['database.password'] = cmd_line_args.password
 
-print(f'Connecting...')
-dj.conn()
+    dj.config['database.host'] = settings.DJ_DATABASE_HOST
+    dj.config['database.port'] = settings.DJ_DATABASE_PORT
+    dj.config['safemode'] = settings.DJ_CONFIG_SAFEMODE
+    dj.config['stores'] = settings.DJ_CONFIG_STORES
 
-print('Importing schema...')
-from emu24.schema import *
+    print(f'Connecting...')
+    dj.conn()
 
+
+if __name__ == "__main__":
+    print('Running helper automatic setup')
+    args = login_parser.parse_args()
+    connect(args)
+    print('Importing schema...')
+    from emu24.schema import *
 

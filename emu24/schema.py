@@ -1,8 +1,10 @@
+import json
 from pathlib import Path
 
 import datajoint as dj
 import re
 import os
+import warnings
 from emu24.settings import DATABASE_NAME, STITCHED_PATH
 from brpylib import NsxFile
 from pyNsXStitch.stitchers import StitchedNeVFile, StitchedNsXFile
@@ -161,6 +163,21 @@ class TaskComments(dj.Computed):
         '$TASKMETA': 'META',
     }
 
+    def save_empty(self, max_id, key, file, reason=None):
+        """
+        Save a indicator that this chunk did not have any meaningful comments
+
+        This is important to make sure the chunk is removed from the key source and we don't re-run the make
+        function for this chunk every time we run populate()
+        """
+        reason = "This chunk did not contain any comments" if reason is None else reason
+        key['comment_id'] = max_id
+        key['timestamp'] = 0
+        key['type'] = 'NOCOMMENT'
+        key['comment'] = reason
+        self.insert1(key)
+        print(f'Saved NOCOMMENT for {file}')
+
     def make(self, key):
 
         # Prepare an auto-incrementing counter to ensure each comment has a unique ID
@@ -170,15 +187,10 @@ class TaskComments(dj.Computed):
         file = (NSPChunks & key).fetch1('nev_file')
         df = get_all_nev_comments([file])
 
-        # Special case for if there are no comments in this file, so it doesn't get re-computed every time
+        # Check special case for if there are no comments in this file at all
         if df.empty:
             max_id += 1
-            key['comment_id'] = max_id
-            key['timestamp'] = 0
-            key['type'] = 'NOCOMMENT'
-            key['comment'] = "This chunk did not contain any comments"
-            self.insert1(key)
-            print(f'Saved NOCOMMENT for {file}')
+            self.save_empty(max_id, key, file)
             return  # No need to continue here
 
         print(f'\n Found {len(df)} comment events in {file}')
@@ -187,6 +199,12 @@ class TaskComments(dj.Computed):
         comments = df['Data'].str
         idx = comments.contains('$', regex=False)
         matched_entries = df[idx]
+
+        # Check special case for if there are comments but no $TASK... style comments in this file
+        if matched_entries.empty:
+            max_id += 1
+            self.save_empty(max_id, key, file, reason='No valid task comment commands in this file')
+            return  # No need to continue here
 
         # Ignore duplicate comments (NSP issue) even if their timestamps are different
         unique_comments = matched_entries.drop_duplicates(subset=matched_entries.columns.difference(['timestamp']))
@@ -328,6 +346,36 @@ class StitchedChunks(dj.Computed):
         file_name = Path(file_path).name
         return file_name, chunk_id
 
+    @staticmethod
+    def do_stitching(key, out_path, all_nevs, all_nsxs, task_name, start_ts, end_ts):
+        # Stitch the NEV files
+        stitched_nev = StitchedNeVFile(all_nevs, start=start_ts, end=end_ts)
+        full_nev_path = os.path.join(out_path, f'{task_name}.nev')
+        if os.path.exists(full_nev_path):
+            print(f'\nOverwriting old output file: {full_nev_path}')
+            os.remove(full_nev_path)
+        with open(full_nev_path, 'wb') as f:
+            stitched_nev.write(f)
+        key['nev_file'] = full_nev_path
+
+        # Stitch and save the locations of the NSX files
+        for filetype, files in all_nsxs.items():
+            if not files:
+                continue  # Skip filetypes that we don't have
+            stitched_nsx = StitchedNsXFile(files, start=start_ts, end=end_ts, aggressive_concat=True)
+            full_nsx_path = os.path.join(out_path, f'{task_name}.{filetype}')
+            if os.path.exists(full_nsx_path):
+                print(f'\nOverwriting old output file: {full_nsx_path}')
+                try:
+                    os.remove(full_nsx_path)
+                except FileNotFoundError:
+                    raise warnings.warn('File did not exist!')
+            with open(full_nsx_path, 'wb+') as f:
+                stitched_nsx.write(f)
+            key[f'{filetype}_file'] = full_nsx_path
+
+        return key
+
     def make(self, key):
 
         print(key)
@@ -379,30 +427,22 @@ class StitchedChunks(dj.Computed):
         out_path = os.path.join(self.output, patient, folder_name)
         os.makedirs(out_path, exist_ok=True)
 
-        # Stitch the NEV files
-        stitched_nev = StitchedNeVFile(all_nevs, start=start_ts, end=end_ts)
-        full_nev_path = os.path.join(out_path, f'{task_name}.nev')
-        if os.path.exists(full_nev_path):
-            print(f'\nOverwriting old output file: {full_nev_path}')
-            os.remove(full_nev_path)
-        with open(full_nev_path, 'wb') as f:
-            stitched_nev.write(f)
-        key['nev_file'] = full_nev_path
+        try:
+            key = self.do_stitching(key, out_path, all_nevs, all_nsxs, task_name, start_ts, end_ts)
+        except Exception as e:
+            import sys, traceback, datetime, warnings
+            exc_info = sys.exc_info()
+            exception_info = traceback.format_exception(*exc_info)
 
-        # Stitch and save the locations of the NSX files
-        for filetype, files in all_nsxs.items():
-            if not files:
-                continue  # Skip filetypes that we don't have
-            stitched_nsx = StitchedNsXFile(files, start=start_ts, end=end_ts, aggressive_concat=True)
-            full_nsx_path = os.path.join(out_path, f'{task_name}.{filetype}')
-            if os.path.exists(full_nsx_path):
-                print(f'\nOverwriting old output file: {full_nsx_path}')
-                os.remove(full_nsx_path)
-            with open(full_nsx_path, 'wb+') as f:
-                stitched_nsx.write(f)
-            key[f'{filetype}_file'] = full_nsx_path
+            now = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            with open(os.path.join(out_path, f'error-{now}.txt'), 'w') as f:
+                f.write('Error occured when processing:  ')
+                f.write(json.dumps(key, indent=2))
+                f.writelines(exception_info)
+
+            warnings.warn("\n".join(exception_info))
 
         try:
-            self.insert1(key)
+            self.insert1(key, replace=True)
         except dj.DataJointError as e:
             print(e)

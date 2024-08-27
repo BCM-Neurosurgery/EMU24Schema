@@ -60,4 +60,7 @@ def make_patient():
 
 
 if __name__ == '__main__':
+    args = login_parser.parse_args()
+    connect(args)
+    from emu24.schema import *
     make_patient()
