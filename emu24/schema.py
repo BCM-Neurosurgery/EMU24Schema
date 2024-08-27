@@ -9,7 +9,15 @@ from emu24.settings import DATABASE_NAME, STITCHED_PATH
 from brpylib import NsxFile
 from pyNsXStitch.stitchers import StitchedNeVFile, StitchedNsXFile
 from pyNsXStitch.helpers import get_all_nev_comments
+import logging
 
+# Configure logging
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s - %(levelname)s - %(message)s',
+                    handlers=[
+                        logging.FileHandler("/home/auto/CODE/emu/EMU24Schema/scripts/datajoint_computed_table.log"),
+                        logging.StreamHandler()
+                    ])
 
 def get_emu_id(comment_text):
     """
@@ -104,43 +112,50 @@ class NSPChunks(dj.Computed):
     key_source = NS3Chunks + NS5Chunks
 
     def make(self, key):
-        source = self.key_source
+        try:
+            source = self.key_source
 
-        key_dict = (source & key).fetch1()
+            # Debugging key source
+            key_dict = (source & key).fetch1()
 
-        # Get all the primary keys to look up the correct NeV file
-        patient, admission = key_dict['patient_id'], key_dict['admission_id']
-        toc, nsp, chunk = key_dict['toc_id'], key_dict['nsp_id'], key_dict['chunk_id']
-        query = NEVChunks & (
-            f"patient_id={patient} "
-            f"AND admission_id={admission} "
-            f"AND toc_id={toc} "
-            f"AND nsp_id={nsp} "
-            f"AND chunk_id={chunk}"
-        )
-        nev_file = query.fetch1('nev_file')
+            # Get all the primary keys to look up the correct NeV file
+            patient, admission = key_dict['patient_id'], key_dict['admission_id']
+            toc, nsp, chunk = key_dict['toc_id'], key_dict['nsp_id'], key_dict['chunk_id']
+            query = NEVChunks & (
+                f"patient_id={patient} "
+                f"AND admission_id={admission} "
+                f"AND toc_id={toc} "
+                f"AND nsp_id={nsp} "
+                f"AND chunk_id={chunk}"
+            )
 
-        # Load headers either from ns3 or ns5
-        if key_dict['ns3_file'] is not None:
-            nsx_fileobj = NsxFile(key_dict['ns3_file'])
-            file_path = key_dict['ns3_file'][:-4]
-        else:
-            nsx_fileobj = NsxFile(key_dict['ns5_file'])
-            file_path = key_dict['ns5_file'][:-4]
-        key['file'] = Path(file_path).parts[-1]
+            nev_file = query.fetch1('nev_file')
 
-        # Extract the absolute time
-        header = nsx_fileobj.basic_header
-        key['absolute_time'] = str(header['TimeOrigin'])
+            # Load headers either from ns3 or ns5
+            if key_dict['ns3_file'] is not None:
+                nsx_fileobj = NsxFile(key_dict['ns3_file'])
+                file_path = key_dict['ns3_file'][:-4]
+            else:
+                nsx_fileobj = NsxFile(key_dict['ns5_file'])
+                file_path = key_dict['ns5_file'][:-4]
+            key['file'] = Path(file_path).parts[-1]
 
-        key['nev_file'] = nev_file
-        if key_dict['ns3_file'] is not None:
-            key['ns3_file'] = key_dict['ns3_file']
-        if key_dict['ns5_file'] is not None:
-            key['ns5_file'] = key_dict['ns5_file']
+            # Extract the absolute time
+            header = nsx_fileobj.basic_header
+            key['absolute_time'] = str(header['TimeOrigin'])
 
-        # Insert into database
-        self.insert1(key)
+            key['nev_file'] = nev_file
+            if key_dict['ns3_file'] is not None:
+                key['ns3_file'] = key_dict['ns3_file']
+            if key_dict['ns5_file'] is not None:
+                key['ns5_file'] = key_dict['ns5_file']
+
+            # Insert into database
+            self.insert1(key)
+        except dj.DataJointError as e:
+            print(f"Failed to insert key {key}: {e}")
+            with open('populate_errors.log', 'a') as f:
+                f.write(f"Failed to insert key {key}: {e}\n")
 
 
 @schema
@@ -297,7 +312,7 @@ class StopComments(dj.Computed):
         'type',
         comment='comment',
         timestamp='timestamp'
-    ) & ['type = "KILL"', 'type = "STOP"', 'type = "ERROR"']
+    ) & ['type = "KILL"', 'type = "STOP"', 'type = "ERR"']
 
     def make(self, key):
         comment, timestamp = (self.key_source & key).fetch1('comment', 'timestamp')
@@ -430,7 +445,7 @@ class StitchedChunks(dj.Computed):
         try:
             key = self.do_stitching(key, out_path, all_nevs, all_nsxs, task_name, start_ts, end_ts)
         except Exception as e:
-            import sys, traceback, datetime, warnings
+            import sys, traceback, datetime
             exc_info = sys.exc_info()
             exception_info = traceback.format_exception(*exc_info)
 
@@ -445,4 +460,4 @@ class StitchedChunks(dj.Computed):
         try:
             self.insert1(key, replace=True)
         except dj.DataJointError as e:
-            print(e)
+            warnings.warn(str(e))
