@@ -5,19 +5,11 @@ import datajoint as dj
 import re
 import os
 import warnings
-from emu24.settings import DATABASE_NAME, STITCHED_PATH
+from emu24.settings import DATABASE_NAME, STITCHED_PATH, CHECKSUM_SIZE_LIMIT
 from brpylib import NsxFile
 from pyNsXStitch.stitchers import StitchedNeVFile, StitchedNsXFile
 from pyNsXStitch.helpers import get_all_nev_comments
 import logging
-
-# Configure logging
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s - %(levelname)s - %(message)s',
-                    handlers=[
-                        logging.FileHandler("/home/auto/CODE/emu/EMU24Schema/scripts/datajoint_computed_table.log"),
-                        logging.StreamHandler()
-                    ])
 
 def get_emu_id(comment_text):
     """
@@ -29,6 +21,9 @@ def get_emu_id(comment_text):
     emu_id = int(emu_match.group(1), 10) if emu_match else 99999
     return emu_id
 
+
+# Disable large file checksums schema-wide. Necessary for speed
+dj.config["filepath_checksum_size_limit"] = CHECKSUM_SIZE_LIMIT
 
 # Define the schema
 schema = dj.schema(DATABASE_NAME)
