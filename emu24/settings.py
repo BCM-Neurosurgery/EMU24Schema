@@ -8,6 +8,9 @@ DJ_DATABASE_PORT = 3306
 environment = os.environ.get('ENVIRONMENT', default="development")
 
 if environment == 'dev' or environment == 'development':
+
+    CHECKSUM_SIZE_LIMIT = 1  # Disable checksums for virtually all files
+
     datalake_path = os.environ.get('DATALAKE_PATH')
     STITCHED_PATH = os.environ.get('STITCHED_PATH')
 
@@ -29,6 +32,9 @@ if environment == 'dev' or environment == 'development':
 
 # Run in deploy mode: for initial deployment to the production server but not yet modifying real data
 elif environment == 'deploy':
+
+    CHECKSUM_SIZE_LIMIT = 1 * 1024**2  # Disable checksums for files above 1MB
+
     DATABASE_NAME = 'emu24_stitch_deploy'
     STITCHED_PATH = "/mnt/lake-database/test-stitched"
     DJ_CONFIG_SAFEMODE = False
@@ -47,6 +53,11 @@ elif environment == 'deploy':
 
 # Run DataJoint in production mode: for true real running conditions
 elif environment == 'prod' or environment == 'production':
+
+    # Checksums for large NsX files dramatically slow down database operations. We use a threshold that
+    # disables checksums for virtually all NsX files, but should keep NeV files for data validation
+    CHECKSUM_SIZE_LIMIT = 50 * 1024**2  # Disable checksums for files above 50MB
+
     DATABASE_NAME = 'emu24_stitch'
     STITCHED_PATH = "/mnt/lake-database/stitched"
     DJ_CONFIG_SAFEMODE = True
