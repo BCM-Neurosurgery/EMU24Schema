@@ -25,6 +25,9 @@ def connect(cmd_line_args=None):
     dj.config['safemode'] = settings.DJ_CONFIG_SAFEMODE
     dj.config['stores'] = settings.DJ_CONFIG_STORES
 
+    # Disable large file checksums schema-wide. Necessary for speed
+    dj.config["filepath_checksum_size_limit"] = settings.CHECKSUM_SIZE_LIMIT
+
     print(f'Connecting...')
     dj.conn()
 

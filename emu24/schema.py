@@ -22,9 +22,6 @@ def get_emu_id(comment_text):
     return emu_id
 
 
-# Disable large file checksums schema-wide. Necessary for speed
-dj.config["filepath_checksum_size_limit"] = CHECKSUM_SIZE_LIMIT
-
 # Define the schema
 schema = dj.schema(DATABASE_NAME)
 
