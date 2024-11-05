@@ -48,13 +48,15 @@ elif environment == 'deploy':
 # Run DataJoint in production mode: for true real running conditions
 elif environment == 'prod' or environment == 'production':
     DATABASE_NAME = 'emu24_stitch'
-    STITCHED_PATH = "/mnt/lake-database/stitched"
+    DATALAKE_PATH = os.environ.get('DATALAKE_PATH', "/mnt/datalake/data/emu/")
+    STITCHED_PATH = os.environ.get("STITCHED_PATH", "/mnt/lake-database/stitched")
+    LOGGING_PATH = os.environ.get("LOGGING_PATH", "/home/auto/CODE/emu/EMU24Schema/scripts/datajoint_computed_table.log")
     DJ_CONFIG_SAFEMODE = True
     DJ_CONFIG_STORES = {
         "Ext_Chunk": {
             "protocol": "file",
-            "location": "/mnt/datalake/data/emu/",
-            "stage": "/mnt/datalake/data/emu/"
+            "location": DATALAKE_PATH,
+            "stage": DATALAKE_PATH
         },
         "Ext_Stitch": {
             "protocol": "file",

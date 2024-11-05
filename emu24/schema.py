@@ -5,7 +5,7 @@ import datajoint as dj
 import re
 import os
 import warnings
-from emu24.settings import DATABASE_NAME, STITCHED_PATH
+from emu24.settings import DATABASE_NAME, STITCHED_PATH, LOGGING_PATH
 from brpylib import NsxFile
 from pyNsXStitch.stitchers import StitchedNeVFile, StitchedNsXFile
 from pyNsXStitch.helpers import get_all_nev_comments
@@ -15,7 +15,7 @@ import logging
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(levelname)s - %(message)s',
                     handlers=[
-                        logging.FileHandler("/home/auto/CODE/emu/EMU24Schema/scripts/datajoint_computed_table.log"),
+                        logging.FileHandler(LOGGING_PATH),
                         logging.StreamHandler()
                     ])
 
