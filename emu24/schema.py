@@ -312,7 +312,7 @@ class StopComments(dj.Computed):
         'type',
         comment='comment',
         timestamp='timestamp'
-    ) & ['type = "KILL"', 'type = "STOP"', 'type = "ERR"']
+    ) & ['type = "KILL"', 'type = "STOP"', 'type = "ERROR"']
 
     def make(self, key):
         comment, timestamp = (self.key_source & key).fetch1('comment', 'timestamp')
