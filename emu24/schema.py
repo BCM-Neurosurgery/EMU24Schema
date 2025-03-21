@@ -175,6 +175,7 @@ class TaskComments(dj.Computed):
         '$TASKSTOP': 'STOP',
         '$TASKKILL': 'KILL',
         '$TASKERROR': 'ERROR',
+        '$TASKERR': 'ERROR',
         '$TASKMETA': 'META',
     }
 
