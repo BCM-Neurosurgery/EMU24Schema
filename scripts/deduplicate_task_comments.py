@@ -32,9 +32,9 @@ def dedupe_comment_table(table, patient_id, task_id, nsp_id, preference):
         else:
             raise ValueError(f'Invalid preference: {preference}')
 
-        other_matches = matches[matches.timestamp != chosen_ts]
+        other_matches = [match for match in matches if match['timestamp'] != chosen_ts]
         for to_delete in other_matches:
-            to_delete_str = id_str + f" and comment_id={to_delete[5]}"
+            to_delete_str = id_str + f" and comment_id={to_delete['comment_id']}"
             (table & to_delete_str).delete()
 
 
