@@ -26,15 +26,16 @@ def dedupe_comment_table(table, patient_id, task_id, nsp_id, preference):
 
         timestamps = (table & id_str).fetch('timestamp')
         if preference == 'first':
-            chosen_ts_id = np.argmax(timestamps)
+            chosen_ts = max(timestamps)
         elif preference == 'last':
-            chosen_ts_id = np.argmin(timestamps)
+            chosen_ts = min(timestamps)
         else:
             raise ValueError(f'Invalid preference: {preference}')
 
-        comment_id = matches[chosen_ts_id][5]
-        to_delete_id = id_str + f" and comment_id={comment_id}"
-        (table & to_delete_id).delete()
+        other_matches = matches[matches.timestamp != chosen_ts]
+        for to_delete in other_matches:
+            to_delete_str = id_str + f" and comment_id={to_delete[5]}"
+            (table & to_delete_str).delete()
 
 
 
