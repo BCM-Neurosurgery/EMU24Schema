@@ -12,7 +12,7 @@ from emu24.schema import Patient, StopComments, StartComments, TaskComments, Tas
 
 NSP_IDS = [1, 2]
 
-def dedupe_comment(table, patient_id, task_id, nsp_id, preference, commit=False):
+def dedupe_comment(table, patient_id, task_id, nsp_id, preference, commit=False, no_confirm=False):
     """
     Ensure that there is only one comment in this table for this patient, task and nsp combination
 
@@ -53,13 +53,14 @@ def dedupe_comment(table, patient_id, task_id, nsp_id, preference, commit=False)
                   f'    {task_data_comments[0]["comment"]} \n'
                   f'    This timestamp: {to_delete["timestamp"]}     chosen timestamp: {chosen_ts}\n')
             if commit:
-                (TaskComments & to_delete_str).delete()  # Delete at the source to avoid re-population
+                (TaskComments & to_delete_str).delete(safemode=no_confirm)  # Delete at the source to avoid re-population
 
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--commit', default=False, action='store_true')
+    parser.add_argument('--noconfirm', default=False, action='store_true')
     args = parser.parse_args()
 
     all_patients = Patient().fetch('patient_id')
@@ -69,6 +70,6 @@ if __name__ == '__main__':
         for task in all_task_ids:
             for nsp in NSP_IDS:
 
-                dedupe_comment(StartComments, patient, task, nsp, preference='first', commit=args.commit)
-                dedupe_comment(StopComments, patient, task, nsp, preference='last', commit=args.commit)
+                dedupe_comment(StartComments, patient, task, nsp, preference='first', commit=args.commit, no_confirm=args.noconfirm)
+                dedupe_comment(StopComments, patient, task, nsp, preference='last', commit=args.commit, no_confirm=args.noconfirm)
 
