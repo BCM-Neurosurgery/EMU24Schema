@@ -36,9 +36,6 @@ def dedupe_comment(table, patient_id, task_id, nsp_id, preference, commit=False)
 
     # Check if any de-duplication needs to be done. In theory there should only be one result
     if len(matches) > 1:
-        print(f'Found duplicates for: {id_str}')
-        print(matches)
-
         timestamps = (table & id_str).fetch('timestamp')
         if preference.lower() == 'first':
             chosen_ts = max(timestamps)
