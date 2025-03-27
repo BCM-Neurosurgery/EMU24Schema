@@ -6,15 +6,19 @@ from emu24 import settings
 
 print(f'Using settings for the {settings.environment} environment...')
 
-login_parser = argparse.ArgumentParser()
-login_parser.add_argument('-u', '--username', required=False)
-login_parser.add_argument('-p', '--password', required=False)
+
+def make_login_parser():
+    login_parser = argparse.ArgumentParser()
+    login_parser.add_argument('-u', '--username', required=False)
+    login_parser.add_argument('-p', '--password', required=False)
+    return login_parser
 
 
 def connect(cmd_line_args=None, username=None, password=None):
+    print('Preparing datajoint connection settings...')
     if cmd_line_args and cmd_line_args.username and cmd_line_args.password:
-        username = cmd_line_args.username
-        password = cmd_line_args.password
+        dj.config['database.user'] = cmd_line_args.username
+        dj.config['database.password'] = cmd_line_args.password
     if username:
         print(f'Using the given username')
         dj.config['database.user'] = username
@@ -33,7 +37,8 @@ def connect(cmd_line_args=None, username=None, password=None):
 
 if __name__ == "__main__":
     print('Running helper automatic setup')
-    args = login_parser.parse_args()
+    args = make_login_parser().parse_args()
+    print(args)
     connect(args)
     print('Importing schema...')
     from emu24.schema import *
