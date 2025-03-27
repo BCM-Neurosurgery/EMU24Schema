@@ -46,7 +46,7 @@ def dedupe_comment(table, patient_id, task_id, nsp_id, preference, commit=False)
 
         other_matches = [match for match in matches if match['timestamp'] != chosen_ts]
         for to_delete in other_matches:
-            to_delete_str = id_str + f" and comment_id={to_delete['comment_id']}"
+            to_delete_str = f"patient_id={patient_id} and comment_id={to_delete['comment_id']}"
             task_data_comments = (TaskIDComments & id_str).fetch()
             print(f'Comment slated for deletion from {table}: \n'
                   f'    {to_delete_str}\n'
