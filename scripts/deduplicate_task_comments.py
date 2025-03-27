@@ -49,8 +49,9 @@ def dedupe_comment(table, patient_id, task_id, nsp_id, preference, commit=False)
             to_delete_str = id_str + f" and comment_id={to_delete['comment_id']}"
             task_data_comments = (TaskIDComments & id_str).fetch()
             print(f'Comment slated for deletion from {table}: \n'
-                  f'    {to_delete_str} timestamp={to_delete["timestamp"]}\n'
-                  f'    {task_data_comments[0]["comment"]} \n')
+                  f'    {to_delete_str}\n'
+                  f'    {task_data_comments[0]["comment"]} \n'
+                  f'    This timestamp: {to_delete["timestamp"]}     chosen timestamp: {chosen_ts}\n')
             if commit:
                 (table & to_delete_str).delete()
 
