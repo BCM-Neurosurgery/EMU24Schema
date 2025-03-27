@@ -7,7 +7,7 @@ from emu24.settings import environment
 if __name__ == '__main__':
     connect(username=os.environ.get('DJ_USER'), password=os.environ.get('DJ_PASSWORD'))
 
-from emu24.schema import Patient, StopComments, StartComments, TaskIDComments, StitchedChunks
+from emu24.schema import Patient, StopComments, StartComments, TaskComments, TaskIDComments, StitchedChunks
 
 
 NSP_IDS = [1, 2]
