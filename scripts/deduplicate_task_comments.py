@@ -38,9 +38,9 @@ def dedupe_comment(table, patient_id, task_id, nsp_id, preference, commit=False)
     if len(matches) > 1:
         timestamps = (table & id_str).fetch('timestamp')
         if preference.lower() == 'first':
-            chosen_ts = max(timestamps)
-        elif preference.lower() == 'last':
             chosen_ts = min(timestamps)
+        elif preference.lower() == 'last':
+            chosen_ts = max(timestamps)
         else:
             raise ValueError(f'Invalid preference: {preference}')
 
