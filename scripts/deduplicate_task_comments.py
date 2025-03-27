@@ -53,8 +53,7 @@ def dedupe_comment(table, patient_id, task_id, nsp_id, preference, commit=False)
                   f'    {task_data_comments[0]["comment"]} \n'
                   f'    This timestamp: {to_delete["timestamp"]}     chosen timestamp: {chosen_ts}\n')
             if commit:
-                (table & to_delete_str).delete()         #
-                (TaskComments & to_delete_str).delete()  # Delete the source to avoid re-population
+                (TaskComments & to_delete_str).delete()  # Delete at the source to avoid re-population
 
 
 if __name__ == '__main__':
