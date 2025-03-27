@@ -4,7 +4,7 @@ import numpy as np
 # This early connect call is required for connectivity  in the dev environment
 from emu24.helper import *
 from emu24.settings import environment
-if environment == 'development' and __name__ == '__main__':
+if __name__ == '__main__':
     connect(username=os.environ.get('DJ_USER'), password=os.environ.get('DJ_PASSWORD'))
 
 from emu24.schema import Patient, StopComments, StartComments, TaskIDComments, StitchedChunks
