@@ -58,6 +58,11 @@ def dedupe_comment(table, patient_id, task_id, nsp_id, preference, commit=False)
 
 
 if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--commit', default=False, action='store_true')
+    args = parser.parse_args()
+
     all_patients = Patient().fetch('patient_id')
     for patient in all_patients:
 
@@ -65,6 +70,6 @@ if __name__ == '__main__':
         for task in all_task_ids:
             for nsp in NSP_IDS:
 
-                dedupe_comment(StartComments, patient, task, nsp, preference='first')
-                dedupe_comment(StopComments, patient, task, nsp, preference='last')
+                dedupe_comment(StartComments, patient, task, nsp, preference='first', commit=args.commit)
+                dedupe_comment(StopComments, patient, task, nsp, preference='last', commit=args.commit)
 
