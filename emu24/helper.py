@@ -1,6 +1,8 @@
 """Import * from this script to setup your interpreter for working with the dj schema"""
 
 import argparse
+import os
+
 import datajoint as dj
 from emu24 import settings
 
@@ -19,12 +21,17 @@ def connect(cmd_line_args=None, username=None, password=None):
     if cmd_line_args and cmd_line_args.username and cmd_line_args.password:
         dj.config['database.user'] = cmd_line_args.username
         dj.config['database.password'] = cmd_line_args.password
-    if username:
-        print(f'Using the given username')
-        dj.config['database.user'] = username
-    if password:
-        print(f'Using the given password')
-        dj.config['database.password'] = password
+    elif username or password:
+        if username:
+            print(f'Using the given username')
+            dj.config['database.user'] = username
+        if password:
+            print(f'Using the given password')
+            dj.config['database.password'] = password
+    else:
+        dj.config['database.user'] = os.environ.get('DJ_USER')
+        dj.config['database.password'] = os.environ.get('DJ_PASSWORD')
+
 
     dj.config['database.host'] = settings.DJ_DATABASE_HOST
     dj.config['database.port'] = settings.DJ_DATABASE_PORT
