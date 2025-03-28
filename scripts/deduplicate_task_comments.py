@@ -34,6 +34,10 @@ def dedupe_comment(table, patient_id, task_id, nsp_id, preference, commit=False,
     id_str = f'patient_id={patient_id} and emu_id={task_id} and nsp_id={nsp_id}'
     matches = (table & id_str).fetch()
 
+    if len(matches) == 0:
+        print('No matches found: {}'.format(id_str))
+        return
+
     # Check if any de-duplication needs to be done. In theory there should only be one result
     if len(matches) > 1:
         timestamps = (table & id_str).fetch('timestamp')
@@ -67,7 +71,8 @@ if __name__ == '__main__':
     all_patients = Patient().fetch('patient_id')
     for patient in all_patients:
 
-        all_task_ids = (StitchedChunks() & f'patient_id={patient}').fetch('emu_id')
+        extant_task_ids = (StitchedChunks() & f'patient_id={patient}').fetch('emu_id')
+        all_task_ids = list(range(1, max(extant_task_ids) + 1))
         for task in all_task_ids:
             for nsp in NSP_IDS:
 
