@@ -48,6 +48,10 @@ def dedupe_comment(table, patient_id, task_id, nsp_id, preference, commit=False,
         else:
             raise ValueError(f'Invalid preference: {preference}')
 
+        chosen_comment = [match for match in matches if match['timestamp'] == chosen_ts][0]
+        chosen_id_str = f"patient_id={patient_id} and comment_id={chosen_comment['comment_id']}"
+        chosen_task_comment = (TaskIDComments & chosen_id_str).fetch()
+
         other_matches = [match for match in matches if match['timestamp'] != chosen_ts]
         for to_delete in other_matches:
             to_delete_str = f"patient_id={patient_id} and comment_id={to_delete['comment_id']}"
@@ -55,7 +59,8 @@ def dedupe_comment(table, patient_id, task_id, nsp_id, preference, commit=False,
             print(f'Comment slated for deletion from {table}: \n'
                   f'    {to_delete_str}\n'
                   f'    {task_data_comments[0]["comment"]} \n'
-                  f'    This timestamp: {to_delete["timestamp"]}     chosen timestamp: {chosen_ts}\n')
+                  f'    This timestamp: {to_delete["timestamp"]}     chosen timestamp: {chosen_ts}\n'
+                  f'    This comment_type: {to_delete["type"]}    chosen type: {chosen_task_comment["type"]}\n')
             if commit:
                 safemode = not no_confirm
                 (TaskComments & to_delete_str).delete(safemode=safemode)  # Delete at the source to avoid re-population
