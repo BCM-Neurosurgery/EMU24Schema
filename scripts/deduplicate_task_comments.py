@@ -7,7 +7,7 @@ from emu24.settings import environment
 if __name__ == '__main__':
     connect(username=os.environ.get('DJ_USER'), password=os.environ.get('DJ_PASSWORD'))
 
-from emu24.schema import Patient, StopComments, StartComments, TaskComments, StitchedChunks
+from emu24.schema import Patient, StopComments, StartComments, TaskComments, TaskIDComments, StitchedChunks
 
 
 NSP_IDS = [1, 2]
@@ -55,12 +55,13 @@ def dedupe_comment(table, patient_id, task_id, nsp_id, preference, commit=False,
         other_matches = [match for match in matches if match['timestamp'] != chosen_ts]
         for to_delete in other_matches:
             to_delete_str = f"patient_id={patient_id} and comment_id={to_delete['comment_id']}"
-            task_data_comments = (TaskComments & id_str).fetch()
+            taskid_comment = (TaskIDComments & id_str).fetch()
+            task_comment = (TaskComments & to_delete_str).fetch()
             print(f'Comment slated for deletion from {table}: \n'
                   f'    {to_delete_str}\n'
-                  f'    {task_data_comments[0]["comment"]} \n'
+                  f'    {taskid_comment[0]["comment"]} \n'
                   f'    This timestamp: {to_delete["timestamp"]}     chosen timestamp: {chosen_ts}\n'
-                  f'    This comment_type: {task_data_comments[0]["type"]}    chosen type: {chosen_task_comment["type"]}\n')
+                  f'    This comment_type: {task_comment[0]["type"]}    chosen type: {chosen_task_comment["type"]}\n')
             if commit:
                 safemode = not no_confirm
                 (TaskComments & to_delete_str).delete(safemode=safemode)  # Delete at the source to avoid re-population
