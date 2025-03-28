@@ -77,7 +77,7 @@ def list_available_nsp():
 if __name__ == '__main__':
 
     arg_parser = argparse.ArgumentParser(
-        parents=[login_parser],
+        parents=[make_login_parser()],
         description="""
             Helper script for populating the index database
             """,
