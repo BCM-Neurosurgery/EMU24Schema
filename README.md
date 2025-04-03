@@ -22,8 +22,10 @@ You will also need to set the `DATALAKE_PATH` and `STITCHED_PATH` environment va
 These point to the base path of the datalake and the output directory for the stitched data
 respectively.
 
-All the scripts (in `scripts/`) are set up to be runnable and to automatically connect to your local database. You can
-pass your username and password to these scripts as command line arguments to avoid repeatedly typing these out.
+All the scripts (in `scripts/`) are set up to be runnable and to automatically connect to your local database. You can 
+store your username and password in the `DJ_USER`and `DJ_PASSWORD` environment variables to have them automatically used
+by the script to log in and avoid repeatedly typing these out. You can also pass them as arguments to the script, though 
+this is not preferred.
 
 If you are using the schema in interactive mode, then you will need to manually connect to the database.
 ```pyhton
