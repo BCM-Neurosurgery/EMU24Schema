@@ -10,6 +10,7 @@ environment = os.environ.get('ENVIRONMENT', default="development")
 if environment == 'dev' or environment == 'development':
     datalake_path = os.environ.get('DATALAKE_PATH')
     STITCHED_PATH = os.environ.get('STITCHED_PATH')
+    LOGGING_PATH = os.environ.get('LOGGING_PATH', './log.txt')
 
     DATABASE_NAME = 'emu24_stitch_dev'
     DJ_CONFIG_SAFEMODE = False
