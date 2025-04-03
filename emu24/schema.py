@@ -197,7 +197,7 @@ class TaskComments(dj.Computed):
     def make(self, key):
 
         # Prepare an auto-incrementing counter to ensure each comment has a unique ID
-        max_id = max(TaskComments().fetch('comment_id'))
+        max_id = max(TaskComments().fetch('comment_id', order_by='comment_id DESC', limit=1))
 
         # Get the file name, and extract all the comments out of that file
         file = (NSPChunks & key).fetch1('nev_file')
