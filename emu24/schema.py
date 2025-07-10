@@ -54,6 +54,17 @@ class Admission(dj.Manual):
     admission_date: varchar(256)  # secondary attribute
     """
 
+@schema
+class BrainRegions(dj.Manual):
+    definition = """
+    -> Admission
+    probe_id: int # primary key
+    
+    ---
+    brain_region: varchar(64)
+    micros_available: bool
+    n_contacts: int
+    """
 
 @schema
 class TOCInstance(dj.Manual):
