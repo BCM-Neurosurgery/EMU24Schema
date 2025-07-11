@@ -55,15 +55,40 @@ class Admission(dj.Manual):
     """
 
 @schema
-class BrainRegions(dj.Manual):
+class Probes(dj.Manual):
     definition = """
     -> Admission
     probe_id: int # primary key
-    
     ---
+    label: varchar(64)
     brain_region: varchar(64)
     micros_available: bool
     n_contacts: int
+    hemisphere: varchar(64)
+    manufacturer: varchar(64)
+    type: varchar(64)
+    """
+
+@schema
+class ElectrodeContacts(dj.Manual):
+    definition = """
+    -> Probes
+    electrode_id: int # primary key
+    ---
+    electrode_label: varchar(64)
+    micro_adjacent: bool
+    coord_x: float
+    coord_y: float
+    coord_z: float
+    mni_x: float
+    mni_y: float
+    mni_z: float
+    scanner_r: float
+    scanner_a: float
+    scanner_s: float
+    roi: varchar(64)
+    matter: varchar(64)
+    area_fs: varchar(64)
     """
 
 @schema

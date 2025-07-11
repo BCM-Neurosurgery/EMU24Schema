@@ -1,3 +1,10 @@
 *.egg-info
 *.pyc
 .idea/:
+*log*
+db/
+db/*
+docker-compose*.yml
+mysql_data/
+.vscode
+.vscode/*
