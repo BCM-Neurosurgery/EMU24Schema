@@ -61,7 +61,7 @@ class Probes(dj.Manual):
     probe_id: int # primary key
     ---
     label: varchar(64)
-    brain_region: varchar(64)
+    region_target: varchar(64)
     micros_available: bool
     n_contacts: int
     hemisphere: varchar(64)

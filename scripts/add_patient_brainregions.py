@@ -3,6 +3,44 @@ from emu24.helper import *
 from glob import glob
 import pandas as pd
 import numpy as np
+import re
+
+# Mapping for broad region codes\ 
+BROAD_MAP = {
+    'F1': 'superior frontal gyrus',
+    'F2': 'middle frontal gyrus',
+    'F3': 'inferior frontal gyrus',
+    'P1': 'superior parietal lobule',
+    'P2': 'inferior parietal lobule',
+    'T1': 'superior temporal gyrus',
+    'T2': 'middle temporal gyrus',
+    'T3': 'inferior temporal gyrus',
+    'O1': 'superior occipital gyrus',
+    'O2': 'inferior occipital gyrus',
+}
+
+# Mapping for specific region prefixes
+SPECIFIC_MAP = [
+    (r'^(OF|OFC)[a-fA-F]?', 'orbitofrontal cortex'),
+    (r'^PH[a-fA-F]?', 'parahippocampal gyrus'),
+    (r'^(SMC|SMA)[a-fA-F]?', 'supplementary motor area'),
+    (r'^(ANT|AN)[a-fA-F]?', 'anterior nucleus thalamus'),
+    (r'^PVN[a-fA-F]?', 'paraventricular nucleus hypothalamus'),
+    (r'^CM[a-fA-F]?', 'centromedial nucleus thalamus'),
+    (r'^Pulv[a-fA-F]?', 'pulvinar'),
+    (r'^E[a-fA-F]?', 'entorhinal cortex'),
+    (r'^H[a-fA-F]?', 'hippocampus'),
+    (r'^C[a-fA-F]?', 'cingulate cortex'),
+    (r'^(I|INS)[a-fA-F]?', 'insula'),
+    (r'^A[a-fA-F]?', 'amygdala'),
+]
+
+# Regex to split probe name
+PATTERN = re.compile(r'^([LR])'               # Side L or R
+                     r'([TFPO][1-3][a-f]?)'   # Broad code
+                     r'(L[a-f]?)?'           # Optional lesion code
+                     r'(.+)?$')               # Optional specific code
+
 
 def get_patients():
     # grab patients from db
@@ -20,7 +58,7 @@ def scrape_electrode_info(patients):
         if pt_probes.size > 0:
             continue
         if patient > "YFJ":
-            csv_glob = f"{DATALAKE_PATH}/{patient}Datafile/IMG/{patient}*electrodes_v20*.csv"
+            csv_glob = f"{PROJECTWORLDS_PATH}/{patient}_Datafile/IMG/{patient}*electrodes_v20*.csv"
         else:
             csv_glob = f"{ECOG_PATH}/{patient}Datafile/IMG/{patient}*electrodes_v20*.csv"
         path_match = glob(csv_glob)
@@ -56,7 +94,7 @@ def scrape_electrode_info(patients):
             type_ = probe_df.iloc[0].Type
             # put all into dict
             insert_dict["micros_available"] = int(micros_available)
-            insert_dict["brain_region"] = get_region(label)
+            insert_dict["region_target"] = parse_probe(label)['final_name']
             insert_dict['n_contacts'] = no_contacts
             insert_dict['hemisphere'] = hemisphere
             insert_dict['manufacturer'] = manufacturer
@@ -95,8 +133,64 @@ def scrape_electrode_info(patients):
                 ElectrodeContacts().insert1(insert_dict)
 
 
-def get_region(label):
-    return "TODO"
+def parse_probe(label):
+    """
+    Parse a probe label into its components and construct a descriptive name.
+    Returns a dict with keys: broad_raw, broad_name, has_lesion, lesion_raw,
+    speicifc_raw, specific_name, final_name.
+    """
+    m = PATTERN.match(label)
+    if not m:
+        return {'final_name': 'N/A'}
+    
+    side, broad_raw, lesion_raw, specific_raw = m.groups()
+    # determine broad name
+    broad_key = broad_raw[:2]
+    broad_name = BROAD_MAP.get(broad_key, None)
+    if not broad_name:
+        return {'final_name': 'N/A'}
+    
+    # Lesion flag
+    has_lesion = bool(lesion_raw)
+    
+    # Map specific
+    # Parse up to two specific codes at start of specific_raw
+    specifics = []
+    rest = specific_raw or ''
+    while rest and len(specifics) < 2:
+        for pattern, label in SPECIFIC_MAP:
+            m2 = re.match(pattern, rest)
+            if m2:
+                code = m2.group(0)
+                specifics.append(label)
+                rest = rest[len(code):]
+                break
+        else:
+            # no further specific match
+            break
+
+    # Build specific_name by concatenating labels
+    specific_name = '/'.join(specifics) if specifics else ''
+    
+    # Build final name
+    if has_lesion and not specific_name:
+        final = f'{broad_name} lesion'
+    elif has_lesion and specific_name:
+        final = f'{specific_name} lesion'
+    elif not has_lesion and specific_name:
+        final = specific_name
+    else:
+        final = broad_name
+    
+    return {
+        'broad_raw': broad_raw,
+        'broad_name': broad_name,
+        'has_lesion': has_lesion,
+        'lesion_raw': lesion_raw or '',
+        'specific_raw': specific_raw or '',
+        'specific_name': specific_name or '',
+        'final_name': final
+    }
 
 
    
