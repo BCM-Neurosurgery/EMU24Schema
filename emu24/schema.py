@@ -233,10 +233,16 @@ class TaskComments(dj.Computed):
     def make(self, key):
 
         # Prepare an auto-incrementing counter to ensure each comment has a unique ID
-        max_id = max(TaskComments().fetch('comment_id', order_by='comment_id DESC', limit=1))
+        try:
+            max_id = max(TaskComments().fetch('comment_id', order_by='comment_id DESC', limit=1))
+        except Exception as e:
+            print(e)
+            max_id = 1
 
         # Get the file name, and extract all the comments out of that file
         file = (NSPChunks & key).fetch1('nev_file')
+        toc_id, chunk_id = (NSPChunks & key).fetch1('toc_id', 'chunk_id')
+        
         df = get_all_nev_comments([file])
 
         # Check special case for if there are no comments in this file at all
@@ -250,6 +256,7 @@ class TaskComments(dj.Computed):
         # Get the subset of all comments that are special command comments
         comments = df['Data'].str
         idx = comments.contains('$', regex=False)
+
         matched_entries = df[idx]
 
         # Check special case for if there are comments but no $TASK... style comments in this file

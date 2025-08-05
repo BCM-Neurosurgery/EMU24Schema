@@ -9,3 +9,4 @@ mysql_data/
 .vscode
 .vscode/*
 .env
+test*.py
