@@ -62,10 +62,24 @@ class Admission(dj.Manual):
 # schema table for electrode config? - dependant on admission
 # keys - timestamp, foreign keys - admission
 
+@schema 
+class ProbeConfig(dj.Manual):
+    definition = """
+    -> Admission
+    config_id: int # primary key
+    ---
+    start_time: varchar(256)
+    end_time: varchar(256)
+    MRI_file: filepath@Ext_Image
+    CT_file: filepath@Ext_Image
+    PIP_file: filepath@Ext_Image
+    T1_file: filepath@Ext_Image
+    """
+
 @schema
 class Probes(dj.Manual):
     definition = """
-    -> Admission
+    -> ProbeConfig
     probe_id: int # primary key
     ---
     label: varchar(64)
@@ -75,28 +89,58 @@ class Probes(dj.Manual):
     hemisphere: varchar(64)
     manufacturer: varchar(64)
     type: varchar(64)
+    native_dx: float
+    native_dy: float
+    native_dz: float
+    mni305_dx: float
+    mni305_dy: float
+    mni305_dz: float
+    mni152_dx: float
+    mni152_dy: float
+    mni152_dz: float
+    deepest_distrio_roi: varchar(64)
+    deepest_xtract_matter: varchar(64)
     """
 
 @schema
-class ElectrodeContacts(dj.Manual):
+class MacroContacts(dj.Manual):
     definition = """
     -> Probes
     electrode_id: int # primary key
     ---
     electrode_label: varchar(64)
     micro_adjacent: bool
-    coord_x: float
-    coord_y: float
-    coord_z: float
-    mni_x: float
-    mni_y: float
-    mni_z: float
-    scanner_r: float
-    scanner_a: float
-    scanner_s: float
-    roi: varchar(64)
-    matter: varchar(64)
-    area_fs: varchar(64)
+    native_x: float
+    native_y: float
+    native_z: float
+    mni305_x: float
+    mni305_y: float
+    mni305_z: float
+    mni152_x: float
+    mni152_y: float
+    mni152_z: float
+    distrio_roi: varchar(64)
+    xtract_matter: varchar(64)
+    """
+
+@schema
+class MicroContacts(dj.Computed):
+    definition = """
+    -> Probes
+    electrode_id: int # primary key
+    ---
+    electrode_label: varchar(64)
+    native_x: float
+    native_y: float
+    native_z: float
+    mni305_x: float
+    mni305_y: float
+    mni305_z: float
+    mni152_x: float
+    mni152_y: float
+    mni152_z: float
+    distrio_roi: varchar(64)
+    xtract_matter: varchar(64)
     """
 
 @schema
