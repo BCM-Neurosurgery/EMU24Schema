@@ -40,7 +40,7 @@ def connect(cmd_line_args=None, username=None, password=None):
     dj.config["filepath_checksum_size_limit"] = 0
 
     print(f'Connecting...')
-    dj.conn()
+    return dj.conn()
 
 
 if __name__ == "__main__":

@@ -1,3 +1,5 @@
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(dotenv_path=find_dotenv('/scratch/tahaismail424/EMU24Schema/.env'))
 from emu24.settings import *
 from emu24.helper import *
 from glob import glob
@@ -7,6 +9,8 @@ import re
 import random
 import re
 from tqdm import tqdm
+from emu24.schema import Patient, Admission, TOCInstance, NS5Chunks, NEVChunks, NS3Chunks
+DATALAKE_PATH = os.environ.get('DATALAKE_PATH', "/mnt/datalake/data/emu/")
 
 def get_patients():
     # grab patients from db
@@ -27,8 +31,8 @@ def add_patient_chunks(patients):
         if not toc_dirs:
             return
         # randomly sample 5
-        elif len(toc_dirs) > 5:
-            toc_dirs = random.sample(toc_dirs, 5)
+        # elif len(toc_dirs) > 5:
+        #     toc_dirs = random.sample(toc_dirs, 5)
         # loop through toc dirs and grab recording files
         for idx, toc_dir in enumerate(toc_dirs):
             toc_insert_dict = {

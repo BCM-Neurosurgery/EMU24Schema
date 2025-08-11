@@ -3,13 +3,16 @@ from pathlib import Path
 
 import datajoint as dj
 import re
+from datajoint.external import ExternalTable
 import os
 import warnings
-from emu24.settings import DATABASE_NAME, STITCHED_PATH, LOGGING_PATH
+from emu24.settings import DATABASE_NAME, STITCHED_PATH, LOGGING_PATH, DJ_DATABASE_HOST, DJ_DATABASE_PORT
+from emu24.helper import connect
 from brpylib import NsxFile
 from pyNsXStitch.stitchers import StitchedNeVFile, StitchedNsXFile
 from pyNsXStitch.helpers import get_all_nev_comments
 import logging
+import pymysql
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG,
@@ -32,6 +35,8 @@ def get_emu_id(comment_text):
 
 # Define the schema
 schema = dj.schema(DATABASE_NAME)
+conn = connect()
+
 
 
 # Define the tables
@@ -53,6 +58,9 @@ class Admission(dj.Manual):
     ---
     admission_date: varchar(256)  # secondary attribute
     """
+
+# schema table for electrode config? - dependant on admission
+# keys - timestamp, foreign keys - admission
 
 @schema
 class Probes(dj.Manual):
@@ -304,7 +312,6 @@ class StartComments(dj.Computed):
     ) & 'type = "START"'
 
     def make(self, key):
-
         comment, timestamp = (self.key_source & key).fetch1('comment', 'timestamp')
         key['comment'] = comment
         key['timestamp'] = timestamp
@@ -393,6 +400,8 @@ class StitchedChunks(dj.Computed):
     )
     chunk_identifiers = ['patient_id', 'admission_id', 'toc_id', 'nsp_id', 'chunk_id']
     output = STITCHED_PATH
+    
+    
 
     def file_lookup(self, key, comment_id_col):
         """Lookup the file that a task is contained within"""
@@ -435,12 +444,45 @@ class StitchedChunks(dj.Computed):
 
         return key
 
+    def delete_existing_file(self, db_path):
+        sql_conn = pymysql.connect(
+            host=DJ_DATABASE_HOST,
+            user=os.environ.get('DJ_USER'),
+            password=os.environ.get("DJ_PASSWORD"),
+            database=DATABASE_NAME
+        )
+        cursor = sql_conn.cursor()
+        
+        # get hash to lookup file
+        get_hash = "SELECT `hash` FROM `~external_Ext_Stitch` WHERE `filepath`=%s"
+        cursor.execute(get_hash, (db_path,))
+        row = cursor.fetchone()
+        if not row:
+            raise ValueError("No external-store row found for that filepath")
+        (h,) = row  # the hash
+        
+        # 2) Delete dependents (or narrow this WHERE to the exact rows you intend to remove)
+        cursor.execute("""
+            DELETE FROM `__stitched_chunks`
+            WHERE nev_file = %s OR ns3_file = %s OR ns5_file = %s
+        """, (h, h, h))
+        
+        # 3) Now you can delete the external-store row
+        cursor.execute("DELETE FROM `~external_Ext_Stitch` WHERE `hash`=%s", (h,))
+        
+        cursor.commit()
+        cursor.close()
+        sql_conn.close()
+        
     def make(self, key):
+        sql_conn = pymysql.connect(
+            host=DJ_DATABASE_HOST,
+            user=os.environ.get('DJ_USER'),
+            password=os.environ.get("DJ_PASSWORD"),
+            database=DATABASE_NAME
+        )
 
         print(key)
-
-        if (self.key_source & key).fetch1('emu_id') == 89:
-            pass
 
         # Get the nev file associated with the start and stop comments
         start_file, start_chunk = self.file_lookup(key, 'start_tid')
@@ -460,7 +502,11 @@ class StitchedChunks(dj.Computed):
         all_nevs = []
         all_nsxs = {'ns3': [], 'ns5': []}
         for entry in all_files:
-            nev, ns3, ns5 = (NSPChunks & 'file = "{}"'.format(entry)).fetch1('nev_file', 'ns3_file', 'ns5_file')
+            try:
+                nev, ns3, ns5 = (NSPChunks & 'file = "{}"'.format(entry)).fetch1('nev_file', 'ns3_file', 'ns5_file')
+            except Exception as e:
+                print(str(e))
+                return 
             all_nevs.append(nev)
             if ns3 is not None:
                 all_nsxs['ns3'].append(ns3)
@@ -500,8 +546,10 @@ class StitchedChunks(dj.Computed):
                 f.writelines(exception_info)
 
             warnings.warn("\n".join(exception_info))
-
+            
         try:
             self.insert1(key, replace=True)
         except dj.DataJointError as e:
             warnings.warn(str(e))
+        
+        sql_conn.close()
