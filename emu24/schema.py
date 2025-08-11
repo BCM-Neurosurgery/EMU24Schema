@@ -332,7 +332,7 @@ class StitchedChunks(dj.Computed):
     ---
     start_filename: varchar(256)  # secondary attribute
     stop_filename: varchar(256)  # secondary attribute
-    nev_file: filepath@Ext_Stitch
+    nev_file = NULL: filepath@Ext_Stitch
     ns3_file = NULL: filepath@Ext_Stitch
     ns5_file = NULL: filepath@Ext_Stitch
     """
@@ -442,6 +442,31 @@ class StitchedChunks(dj.Computed):
         folder_name = '-'.join(task_name.split('_NSP-')[:-1])   # Drop the NSP id for the folder name
         out_path = os.path.join(self.output, patient, folder_name)
         os.makedirs(out_path, exist_ok=True)
+
+        # do not attempt stitching if entry already exists - instead add null entry
+        rep_key = {
+            'patient_id': key['patient_id'],
+            'admission_id': key['admission_id'],
+            'nsp_id': key['nsp_id'],
+            'emu_id': key['emu_id']
+            }
+        res = (StitchedChunks & rep_key).fetch(
+            'patient_id', 'admission_id', 'nsp_id', 
+            'emu_id', 'start_chunk', 'stop_chunk',
+            'start_tid', 'stop_tid'
+            )
+        # can assume for entries with NULL nev_file that it is a duplicate entry
+        if len(res) > 0:
+            key['nev_file'] = None
+            key['ns5_file'] = None
+            key['ns3_file'] = None
+            try:
+                self.insert1(key, replace=True)
+            except dj.DataJointError as e:
+                warnings.warn(str(e))
+            return
+
+        
 
         try:
             key = self.do_stitching(key, out_path, all_nevs, all_nsxs, task_name, start_ts, end_ts)
