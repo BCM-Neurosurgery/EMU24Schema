@@ -5,3 +5,4 @@ docker-compose.yml
 log.txt
 populate_errors.log
 test_populate.py
+scripts/.env*
