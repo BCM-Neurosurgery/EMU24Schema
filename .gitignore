@@ -11,3 +11,4 @@ mysql_data/
 .env
 test*.py
 scripts/.env*
+test*.ipynb

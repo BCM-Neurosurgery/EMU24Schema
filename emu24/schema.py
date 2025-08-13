@@ -70,10 +70,10 @@ class ProbeConfig(dj.Manual):
     ---
     start_time: varchar(256)
     end_time: varchar(256)
-    MRI_file: varchar(256)
-    CT_file: varchar(256)
-    PIP_file: varchar(256) 
-    T1_file: varchar(256)
+    mri_file: varchar(256)
+    ct_file: varchar(256)
+    pip_file: varchar(256)
+    t1_file: varchar(256)
     """
 
 # 
