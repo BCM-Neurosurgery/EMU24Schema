@@ -396,8 +396,8 @@ class StitchedChunks(dj.Computed):
 
         print(key)
 
-        if (self.key_source & key).fetch1('emu_id') == 89:
-            pass
+        # if (self.key_source & key).fetch1('emu_id') == 89:
+        #     pass
 
         # Get the nev file associated with the start and stop comments
         start_file, start_chunk = self.file_lookup(key, 'start_tid')
@@ -444,33 +444,40 @@ class StitchedChunks(dj.Computed):
         os.makedirs(out_path, exist_ok=True)
 
         # do not attempt stitching if entry already exists - instead add null entry
-        rep_key = {
-            'patient_id': key['patient_id'],
-            'admission_id': key['admission_id'],
-            'nsp_id': key['nsp_id'],
-            'emu_id': key['emu_id']
-            }
-        res = (StitchedChunks & rep_key).fetch(
-            'patient_id', 'admission_id', 'nsp_id', 
-            'emu_id', 'start_chunk', 'stop_chunk',
-            'start_tid', 'stop_tid'
-            )
-        # can assume for entries with NULL nev_file that it is a duplicate entry
-        if len(res) > 0:
-            key['nev_file'] = None
-            key['ns5_file'] = None
-            key['ns3_file'] = None
-            try:
-                self.insert1(key, replace=True)
-            except dj.DataJointError as e:
-                warnings.warn(str(e))
-            return
+        # rep_key = {
+        #     'patient_id': key['patient_id'],
+        #     'admission_id': key['admission_id'],
+        #     'nsp_id': key['nsp_id'],
+        #     'emu_id': key['emu_id']
+        #     }
+        # res = (StitchedChunks & rep_key).fetch(
+        #     'patient_id', 'admission_id', 'nsp_id', 
+        #     'emu_id', 'start_chunk', 'stop_chunk',
+        #     'start_tid', 'stop_tid'
+        #     )
+        # # can assume for entries with NULL nev_file that it is a duplicate entry
+        # if len(res) > 0:
+        #     key['nev_file'] = None
+        #     key['ns5_file'] = None
+        #     key['ns3_file'] = None
+        #     try:
+        #         self.insert1(key, replace=True)
+        #     except dj.DataJointError as e:
+        #         warnings.warn(str(e))
+        #     return
 
-        
 
         try:
-            # TODO: do not stitch if file already on disk :) 
-            key = self.do_stitching(key, out_path, all_nevs, all_nsxs, task_name, start_ts, end_ts)
+            # do not stitch if file already on disk :) 
+            nev_path = os.path.join(out_path, f'{task_name}.nev')
+            if not os.path.exists(nev_path):
+                key = self.do_stitching(key, out_path, all_nevs, all_nsxs, task_name, start_ts, end_ts)
+            else:
+                key['nev_file'] = nev_path
+                for filetype, files in all_nsxs.items():
+                    if not files:
+                        continue
+                    key[f'{filetype}_file'] = os.path.join(out_path, f'{task_name}.{filetype}')
         except Exception as e:
             import sys, traceback, datetime
             exc_info = sys.exc_info()
