@@ -469,6 +469,7 @@ class StitchedChunks(dj.Computed):
         
 
         try:
+            # TODO: do not stitch if file already on disk :) 
             key = self.do_stitching(key, out_path, all_nevs, all_nsxs, task_name, start_ts, end_ts)
         except Exception as e:
             import sys, traceback, datetime
