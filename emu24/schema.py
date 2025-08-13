@@ -70,10 +70,10 @@ class ProbeConfig(dj.Manual):
     ---
     start_time: varchar(256)
     end_time: varchar(256)
-    MRI_file: filepath@Ext_Image
-    CT_file: filepath@Ext_Image
-    PIP_file: filepath@Ext_Image # likeky move coregistered scans to separate table
-    T1_file: filepath@Ext_Image # likeky move coregistered scans to separate table
+    MRI_file: varchar(256)
+    CT_file: varchar(256)
+    PIP_file: varchar(256) 
+    T1_file: varchar(256)
     """
 
 # 
@@ -110,7 +110,7 @@ class MacroContacts(dj.Manual):
     mni152_x: float
     mni152_y: float
     mni152_z: float
-    distrio_roi: varchar(64) # likley move this to its own table (distrio atlas info)
+    distrio_3m_roi: varchar(64) # likley move this to its own table (distrio atlas info)
     xtract_matter: varchar(64) # likley move this to its own table (xtract matter info)
     """
 
