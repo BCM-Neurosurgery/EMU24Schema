@@ -72,9 +72,11 @@ class ProbeConfig(dj.Manual):
     end_time: varchar(256)
     MRI_file: filepath@Ext_Image
     CT_file: filepath@Ext_Image
-    PIP_file: filepath@Ext_Image
-    T1_file: filepath@Ext_Image
+    PIP_file: filepath@Ext_Image # likeky move coregistered scans to separate table
+    T1_file: filepath@Ext_Image # likeky move coregistered scans to separate table
     """
+
+# 
 
 @schema
 class Probes(dj.Manual):
@@ -89,17 +91,6 @@ class Probes(dj.Manual):
     hemisphere: varchar(64)
     manufacturer: varchar(64)
     type: varchar(64)
-    native_dx: float
-    native_dy: float
-    native_dz: float
-    mni305_dx: float
-    mni305_dy: float
-    mni305_dz: float
-    mni152_dx: float
-    mni152_dy: float
-    mni152_dz: float
-    deepest_distrio_roi: varchar(64)
-    deepest_xtract_matter: varchar(64)
     """
 
 @schema
@@ -119,8 +110,8 @@ class MacroContacts(dj.Manual):
     mni152_x: float
     mni152_y: float
     mni152_z: float
-    distrio_roi: varchar(64)
-    xtract_matter: varchar(64)
+    distrio_roi: varchar(64) # likley move this to its own table (distrio atlas info)
+    xtract_matter: varchar(64) # likley move this to its own table (xtract matter info)
     """
 
 @schema
@@ -139,8 +130,6 @@ class MicroContacts(dj.Computed):
     mni152_x: float
     mni152_y: float
     mni152_z: float
-    distrio_roi: varchar(64)
-    xtract_matter: varchar(64)
     """
 
 @schema
