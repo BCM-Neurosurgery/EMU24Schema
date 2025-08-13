@@ -6,3 +6,5 @@ log.txt
 populate_errors.log
 test_populate.py
 scripts/.env*
+.env*
+.vscode/
