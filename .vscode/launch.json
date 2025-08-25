@@ -15,7 +15,7 @@
             "justMyCode": false,
             "env": {
                 "PYTHONPATH": "${workspaceFolder}",
-                "ENVIRONMENT": "development",
+                "ENVIRONMENT": "prod",
                 "DATALAKE_PATH": "/mnt/datalake/data/emu",
                 "STITCHED_PATH": "/scratch/tahaismail424/stitched_test",
                 "ECOG_PATH": "/mnt/datalake/ECoG_backup/ECoG_Data",
@@ -24,8 +24,8 @@
                 "DJ_SUPPORT_FILEPATH_MANAGEMENT": "TRUE",
                 "DJ_DATABASE_HOST": "localhost",
                 "DJ_DATABASE_PORT": "3306",
-                "DJ_USER": "stitch-lead",
-                "DJ_PASSWORD": "GBne37%fafghIm"
+                "DJ_USER": "tahaismail424",
+                "DJ_PASSWORD": "T.I.thegoat!#1"
             }
 
         }
