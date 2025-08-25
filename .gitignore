@@ -1,3 +1,9 @@
 *.egg-info
 *.pyc
 .idea/:
+test*.py
+.env*
+log.txt
+*.log
+task_ids.txt
+docker-compose*.yml
