@@ -110,12 +110,10 @@ class MacroContacts(dj.Manual):
     mni152_x: float
     mni152_y: float
     mni152_z: float
-    distrio_3m_roi: varchar(64) # likley move this to its own table (distrio atlas info)
-    xtract_matter: varchar(64) # likley move this to its own table (xtract matter info)
     """
 
 @schema
-class MicroContacts(dj.Computed):
+class MicroContacts(dj.Manual):
     definition = """
     -> Probes
     electrode_id: int # primary key
@@ -130,6 +128,15 @@ class MicroContacts(dj.Computed):
     mni152_x: float
     mni152_y: float
     mni152_z: float
+    """
+
+@schema
+class BaseAtlasInfo(dj.Manual):
+    definition = """
+    -> MacroContacts
+    ---
+    distrio_3m_roi: varchar(64)
+    xtract_matter: varchar(64)
     """
 
 @schema

@@ -4,6 +4,7 @@ from glob import glob
 import pandas as pd
 import numpy as np
 import re
+from neo.io import BlackrockIO
 
 # Mapping for broad region codes\ 
 BROAD_MAP = {
@@ -47,12 +48,65 @@ def get_patients():
     patient_list = Patient().fetch('emu_id')
     return patient_list
 
+def get_scan_files(patient):
+    if patient > "YFJ":
+        search_path = f"{PROJECTWORLDS_PATH}/{patient}_Datafile/IMG"
+    else:
+        search_path = f"{ECOG_PATH}/{patient}Datafile/IMG"
+    
+    mri_glob = glob(f"{search_path}/*MRI*.nii")
+    if len(mri_glob) == 0:
+        mri_file = ''
+    else:
+        mri_file = mri_glob[0]
+    ct_glob = glob(f"{search_path}/*CT*.nii")
+    if len(ct_glob) == 0:
+        ct_file = ''
+    else:
+        ct_file = ct_glob[0]
+    pip_glob = glob(f"{search_path}/{patient}/elec_recon/postInPre.nii.gz")
+    if len(pip_glob) == 0:
+        pip_file = ''
+    else:
+        pip_file = pip_glob[0]
+    t1_glob = glob(f"{search_path}/{patient}/elec_recon/T1.nii.gz")
+    if len(t1_glob) == 0:
+        t1_file = ''
+    else:
+        t1_file = t1_glob[0]
+    return mri_file, ct_file, pip_file, t1_file
+
 def scrape_electrode_info(patients):
     # get their electrode csv path
     for patient in patients:
         # get patient and admission for proper unique key
         pt_id = (Patient() & f"emu_id = '{patient}'").fetch1('patient_id')
-        admission_id = (Admission() & f"patient_id = '{pt_id}'").fetch1('admission_id')
+        admission_id, admission_date = (Admission() & f"patient_id = '{pt_id}'").fetch1('admission_id', 'admission_date')
+
+        # create probe config entry again if it doesn't already exist
+        pt_probe_config_id = (ProbeConfig() & f"patient_id = '{pt_id}'").fetch('config_id')
+        if pt_probe_config_id.size == 0:
+            insert_dict = {}
+            # get current max key
+            query = ProbeConfig().fetch('config_id')
+            if query.size == 0:
+                pt_probe_config_id = 0
+            else:
+                pt_probe_config_id = query.max() + 1
+            insert_dict['patient_id'] = pt_id
+            insert_dict['admission_id'] = admission_id
+            insert_dict['config_id'] = pt_probe_config_id
+            insert_dict['start_time'] = admission_date
+            insert_dict['end_time'] = ''
+            mri_file, ct_file, pip_file, t1_file = get_scan_files(patient)
+            insert_dict['mri_file'] = mri_file
+            insert_dict['ct_file'] = ct_file
+            insert_dict['pip_file'] = pip_file
+            insert_dict['t1_file'] = t1_file
+            ProbeConfig().insert1(insert_dict)
+        else:
+            pt_probe_config_id = pt_probe_config_id[0]
+
         # check if probe data available for patient already - skip if so
         pt_probes = (Probes() & f"patient_id = '{pt_id}'").fetch('probe_id')
         if pt_probes.size > 0:
@@ -79,6 +133,7 @@ def scrape_electrode_info(patients):
             insert_dict = {}
             insert_dict['patient_id'] = pt_id
             insert_dict['admission_id'] = admission_id 
+            insert_dict['config_id'] = pt_probe_config_id
             insert_dict['probe_id'] = idx
             insert_dict['label'] = label
 
@@ -108,29 +163,75 @@ def scrape_electrode_info(patients):
                 insert_dict['patient_id'] = pt_id
                 insert_dict['admission_id'] = admission_id
                 insert_dict['probe_id'] = idx
+                insert_dict['config_id'] = pt_probe_config_id
                 # primary keys
                 insert_dict['electrode_id'] = row.ElectrodeID
                 insert_dict['electrode_label'] = row.Label
                 # additional info
                 insert_dict['micro_adjacent'] = int(True) if 'micro' in row.Type.lower() else int(False)
-                insert_dict['coord_x'] = row.Coord_x
-                insert_dict['coord_y'] = row.Coord_y
-                insert_dict['coord_z'] = row.Coord_z
-                insert_dict['mni_x'] = row.MNI305_x
-                insert_dict['mni_y'] = row.MNI305_y
-                insert_dict['mni_z'] = row.MNI305_z
-                insert_dict['scanner_r'] = row.Scanner_R
-                insert_dict['scanner_a'] = row.Scanner_A
-                insert_dict['scanner_s'] =  row.Scanner_S
+                insert_dict['native_x'] = row.Coord_x
+                insert_dict['native_y'] = row.Coord_y
+                insert_dict['native_z'] = row.Coord_z
+                insert_dict['mni305_x'] = row.MNI305_x
+                insert_dict['mni305_y'] = row.MNI305_y
+                insert_dict['mni305_z'] = row.MNI305_z
+                insert_dict['mni152_x'] = None
+                insert_dict['mni152_y'] = None
+                insert_dict['mni152_z'] = None
+
+                # now insert
+                MacroContacts().insert1(insert_dict)
+
+                # now populate base atlas info for this patient
+                insert_dict = {
+                    'patient_id': pt_id,
+                    'admission_id': admission_id,
+                    'config_id': pt_probe_config_id,
+                    'probe_id': idx,
+                    'electrode_id': row.ElectrodeID,
+                }
+      
                 # Get column names dynamically
                 roi_col = next((col for col in row.index if col.startswith('ROI_') and col.endswith('mm')), None)
                 matter_col = next((col for col in row.index if col.startswith('Matter_') and col.endswith('mm')), None)
-                area_col = next((col for col in row.index if col.startswith('Area_fs')), None)
-                insert_dict['roi'] = row[roi_col] if roi_col else ""
-                insert_dict['matter'] = row[matter_col] if matter_col else ""
-                insert_dict['area_fs'] = row[area_col] if area_col else ""
-                # now insert!!!
-                ElectrodeContacts().insert1(insert_dict)
+                insert_dict['distrio_3m_roi'] = row[roi_col] if roi_col else ""
+                insert_dict['xtract_matter'] = row[matter_col] if matter_col else "" 
+
+                # now insert
+                BaseAtlasInfo().insert1(insert_dict)               
+        # now populate micro contacts for this patient
+        # get all micro adjacent macros for this patient
+        micro_adjacent_macros =  (MacroContacts() & f"patient_id = '{pt_id}'" & "micro_adjacent = '1'").fetch(as_dict=True)
+        # load a sample nsp2 ns5 file for this patient to get micro labels
+        nsp_file = glob(f"{DATALAKE_PATH}/{patient}Datafile/DATA/202*/NSP2*.ns5")[-1]
+        # load file and get signal table
+        nsx_fileobj = BlackrockIO(nsp_file)
+        signal_table = nsx_fileobj.header['signal_channels']
+        # now add all micro by macro
+        for macro in micro_adjacent_macros:
+            # get all micros for this macro
+            base_label = re.search(r'^(.*?)(?:\d{2})$', macro['electrode_label']).group(1)
+            micro_rows = [row for row in signal_table if base_label in row['name']]
+            # now add all micros for this macro
+            insert_dict = {
+                'patient_id': pt_id,
+                'admission_id': admission_id,
+                'config_id': pt_probe_config_id,
+                'probe_id': macro['probe_id'],
+            }
+            for micro_row in micro_rows:
+                insert_dict['electrode_id'] = micro_row['id']
+                insert_dict['electrode_label'] = micro_row['name']
+                insert_dict['native_x'] = macro['native_x']
+                insert_dict['native_y'] = macro['native_y']
+                insert_dict['native_z'] = macro['native_z']
+                insert_dict['mni305_x'] = macro['mni305_x']
+                insert_dict['mni305_y'] = macro['mni305_y']
+                insert_dict['mni305_z'] = macro['mni305_z']
+                insert_dict['mni152_x'] = None
+                insert_dict['mni152_y'] = None
+                insert_dict['mni152_z'] = None
+                MicroContacts().insert1(insert_dict)
 
 
 def parse_probe(label):

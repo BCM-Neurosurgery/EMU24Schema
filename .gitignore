@@ -12,3 +12,5 @@ mysql_data/
 test*.py
 scripts/.env*
 test*.ipynb
+task_ids.txt
+create_tables_mysql.sql
