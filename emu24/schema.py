@@ -39,6 +39,10 @@ conn = connect()
 
 
 
+# Define the schema
+schema = dj.schema(DATABASE_NAME)
+
+
 # Define the tables
 @schema
 class Patient(dj.Manual):
@@ -48,7 +52,6 @@ class Patient(dj.Manual):
     dob: varchar(256) # secondary attribute
     emu_id: varchar(256)
     """
-
 
 @schema
 class Admission(dj.Manual):
@@ -135,8 +138,12 @@ class BaseAtlasInfo(dj.Manual):
     definition = """
     -> MacroContacts
     ---
-    distrio_3m_roi: varchar(64)
-    xtract_matter: varchar(64)
+    ROI_D2009_3mm: varchar(64)
+    Matter_3mm: varchar(64)
+    ROI_DK2005_3mm: varchar(64)
+    ROI_XTRACT_3mm: varchar(64)
+    Area_fs_vox: varchar(64)
+    Matter_fs_vox: varchar(64)
     """
 
 @schema
@@ -281,16 +288,10 @@ class TaskComments(dj.Computed):
     def make(self, key):
 
         # Prepare an auto-incrementing counter to ensure each comment has a unique ID
-        try:
-            max_id = max(TaskComments().fetch('comment_id', order_by='comment_id DESC', limit=1))
-        except Exception as e:
-            print(e)
-            max_id = 1
+        max_id = max(TaskComments().fetch('comment_id', order_by='comment_id DESC', limit=1))
 
         # Get the file name, and extract all the comments out of that file
         file = (NSPChunks & key).fetch1('nev_file')
-        toc_id, chunk_id = (NSPChunks & key).fetch1('toc_id', 'chunk_id')
-        
         df = get_all_nev_comments([file])
 
         # Check special case for if there are no comments in this file at all
@@ -304,7 +305,6 @@ class TaskComments(dj.Computed):
         # Get the subset of all comments that are special command comments
         comments = df['Data'].str
         idx = comments.contains('$', regex=False)
-
         matched_entries = df[idx]
 
         # Check special case for if there are comments but no $TASK... style comments in this file
@@ -352,6 +352,7 @@ class StartComments(dj.Computed):
     ) & 'type = "START"'
 
     def make(self, key):
+
         comment, timestamp = (self.key_source & key).fetch1('comment', 'timestamp')
         key['comment'] = comment
         key['timestamp'] = timestamp
@@ -440,8 +441,6 @@ class StitchedChunks(dj.Computed):
     )
     chunk_identifiers = ['patient_id', 'admission_id', 'toc_id', 'nsp_id', 'chunk_id']
     output = STITCHED_PATH
-    
-    
 
     def file_lookup(self, key, comment_id_col):
         """Lookup the file that a task is contained within"""
@@ -484,45 +483,12 @@ class StitchedChunks(dj.Computed):
 
         return key
 
-    def delete_existing_file(self, db_path):
-        sql_conn = pymysql.connect(
-            host=DJ_DATABASE_HOST,
-            user=os.environ.get('DJ_USER'),
-            password=os.environ.get("DJ_PASSWORD"),
-            database=DATABASE_NAME
-        )
-        cursor = sql_conn.cursor()
-        
-        # get hash to lookup file
-        get_hash = "SELECT `hash` FROM `~external_Ext_Stitch` WHERE `filepath`=%s"
-        cursor.execute(get_hash, (db_path,))
-        row = cursor.fetchone()
-        if not row:
-            raise ValueError("No external-store row found for that filepath")
-        (h,) = row  # the hash
-        
-        # 2) Delete dependents (or narrow this WHERE to the exact rows you intend to remove)
-        cursor.execute("""
-            DELETE FROM `__stitched_chunks`
-            WHERE nev_file = %s OR ns3_file = %s OR ns5_file = %s
-        """, (h, h, h))
-        
-        # 3) Now you can delete the external-store row
-        cursor.execute("DELETE FROM `~external_Ext_Stitch` WHERE `hash`=%s", (h,))
-        
-        cursor.commit()
-        cursor.close()
-        sql_conn.close()
-        
     def make(self, key):
-        sql_conn = pymysql.connect(
-            host=DJ_DATABASE_HOST,
-            user=os.environ.get('DJ_USER'),
-            password=os.environ.get("DJ_PASSWORD"),
-            database=DATABASE_NAME
-        )
 
         print(key)
+
+        if (self.key_source & key).fetch1('emu_id') == 89:
+            pass
 
         # Get the nev file associated with the start and stop comments
         start_file, start_chunk = self.file_lookup(key, 'start_tid')
@@ -542,11 +508,7 @@ class StitchedChunks(dj.Computed):
         all_nevs = []
         all_nsxs = {'ns3': [], 'ns5': []}
         for entry in all_files:
-            try:
-                nev, ns3, ns5 = (NSPChunks & 'file = "{}"'.format(entry)).fetch1('nev_file', 'ns3_file', 'ns5_file')
-            except Exception as e:
-                print(str(e))
-                return 
+            nev, ns3, ns5 = (NSPChunks & 'file = "{}"'.format(entry)).fetch1('nev_file', 'ns3_file', 'ns5_file')
             all_nevs.append(nev)
             if ns3 is not None:
                 all_nsxs['ns3'].append(ns3)
@@ -586,10 +548,8 @@ class StitchedChunks(dj.Computed):
                 f.writelines(exception_info)
 
             warnings.warn("\n".join(exception_info))
-            
+
         try:
             self.insert1(key, replace=True)
         except dj.DataJointError as e:
             warnings.warn(str(e))
-        
-        sql_conn.close()

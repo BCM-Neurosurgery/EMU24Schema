@@ -110,16 +110,18 @@ def scrape_electrode_info(patients):
         pt_probes = (Probes() & f"patient_id = '{pt_id}'").fetch('probe_id')
         if pt_probes.size > 0:
             continue
-        if patient > "YFJ":
-            csv_glob = f"{PROJECTWORLDS_PATH}/{patient}_Datafile/IMG/{patient}*electrodes_v20*.csv"
-        else:
-            csv_glob = f"{ECOG_PATH}/{patient}Datafile/IMG/{patient}*electrodes_v20*.csv"
+        csv_glob = f"{PROJECTWORLDS_PATH}/{patient}_Datafile/IMG/{patient}*electrodes_v2025+.csv"
         path_match = glob(csv_glob)
         if len(path_match) == 0:
             print("skipping patient", patient, "- no electrode file found")
             continue
         csv_path = path_match[0]
         electrode_df = pd.read_csv(csv_path)
+
+        # also get montage df
+        montage_file = f"{DATALAKE_PATH}/{patient}Datafile/INFO/{patient}_montage.xlsx"
+        montage_df = pd.read_excel(montage_file, sheet_name='Sheet2')
+        
         # get unique probes to insert
         # create base label column
 
@@ -150,8 +152,8 @@ def scrape_electrode_info(patients):
             insert_dict["micros_available"] = int(micros_available)
             insert_dict["region_target"] = parse_probe(label)['final_name']
             insert_dict['n_contacts'] = no_contacts
-            insert_dict['hemisphere'] = hemisphere
-            insert_dict['manufacturer'] = manufacturer
+            insert_dict['hemisphere'] = hemisphere if isinstance(hemisphere, str) else None
+            insert_dict['manufacturer'] = manufacturer if isinstance(manufacturer, str) else None
             insert_dict['type'] = type_
             Probes().insert1(insert_dict)
 
@@ -190,20 +192,19 @@ def scrape_electrode_info(patients):
                     'electrode_id': row.ElectrodeID,
                 }
       
-                # Get column names dynamically
-                roi_col = next((col for col in row.index if col.startswith('ROI_') and col.endswith('mm')), None)
-                matter_col = next((col for col in row.index if col.startswith('Matter_') and col.endswith('mm')), None)
-                insert_dict['distrio_3m_roi'] = row[roi_col] if roi_col else ""
-                insert_dict['xtract_matter'] = row[matter_col] if matter_col else "" 
+                insert_dict['ROI_D2009_3mm'] = row['ROI_D2009_3mm'] if isinstance(row['ROI_D2009_3mm'], str) else None
+                insert_dict['Matter_3mm'] = row['Matter_3mm'] if isinstance(row['Matter_3mm'], str) else None
+                insert_dict['ROI_DK2005_3mm'] = row['ROI_DK2005_3mm'] if isinstance(row['ROI_DK2005_3mm'], str) else None
+                insert_dict['ROI_XTRACT_3mm'] = row['ROI_XTRACT_3mm'] if isinstance(row['ROI_XTRACT_3mm'], str) else None
+                insert_dict['Area_fs_vox'] = row['Area_fs_vox'] if isinstance(row['Area_fs_vox'], str) else None
+                insert_dict['Matter_fs_vox'] = row['Matter_fs_vox'] if isinstance(row['Matter_fs_vox'], str) else None
 
                 # now insert
                 BaseAtlasInfo().insert1(insert_dict)               
         # now populate micro contacts for this patient
         # get all micro adjacent macros for this patient
-        micro_adjacent_macros =  (MacroContacts() & f"patient_id = '{pt_id}'" & "micro_adjacent = '1'").fetch(as_dict=True)
-        # load montage file to get micro labels
-        montage_file = f"{DATALAKE_PATH}/{patient}Datafile/INFO/{patient}_montage.xlsx"
-        montage_df = pd.read_excel(montage_file, sheet_name='Sheet2')
+        micro_adjacent_macros = (MacroContacts() & f"patient_id = '{pt_id}'" & "micro_adjacent = '1'").fetch(as_dict=True)
+       
         # now add all micro by macro
         electrode_df['BaseLabel'] 
         for macro in micro_adjacent_macros:
@@ -216,8 +217,9 @@ def scrape_electrode_info(patients):
             unit_vector = get_unit_vector(macro_coords)
             adj_coords = np.array([macro["native_x"], macro["native_y"], macro["native_z"]])
             adj_mni_coords = np.array([macro["mni305_x"], macro["mni305_y"], macro["mni305_z"]])
-            micro_coords = adj_coords + unit_vector * 3
-            micro_mni_coords = adj_mni_coords + unit_vector * 3
+            micro_coords = adj_coords + unit_vector * -3
+            # 5% multiply bc slight distortion in mni space
+            micro_mni_coords = adj_mni_coords + unit_vector * (-3 * 1.05)
             # now add all micros for this macro
             insert_dict = {
                 'patient_id': pt_id,
