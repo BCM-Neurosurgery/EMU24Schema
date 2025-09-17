@@ -4,7 +4,6 @@ from glob import glob
 import pandas as pd
 import numpy as np
 import re
-from neo.io import BlackrockIO
 
 # Mapping for broad region codes\ 
 BROAD_MAP = {
