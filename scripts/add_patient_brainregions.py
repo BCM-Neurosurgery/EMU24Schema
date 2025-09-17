@@ -202,36 +202,62 @@ def scrape_electrode_info(patients):
         # now populate micro contacts for this patient
         # get all micro adjacent macros for this patient
         micro_adjacent_macros =  (MacroContacts() & f"patient_id = '{pt_id}'" & "micro_adjacent = '1'").fetch(as_dict=True)
-        # load a sample nsp2 ns5 file for this patient to get micro labels
-        nsp_file = glob(f"{DATALAKE_PATH}/{patient}Datafile/DATA/202*/NSP2*.ns5")[-1]
-        # load file and get signal table
-        nsx_fileobj = BlackrockIO(nsp_file)
-        signal_table = nsx_fileobj.header['signal_channels']
+        # load montage file to get micro labels
+        montage_file = f"{DATALAKE_PATH}/{patient}Datafile/INFO/{patient}_montage.xlsx"
+        montage_df = pd.read_excel(montage_file, sheet_name='Sheet2')
         # now add all micro by macro
+        electrode_df['BaseLabel'] 
         for macro in micro_adjacent_macros:
             # get all micros for this macro
             base_label = re.search(r'^(.*?)(?:\d{2})$', macro['electrode_label']).group(1)
-            micro_rows = [row for row in signal_table if base_label in row['name']]
+            micro_rows = montage_df[montage_df['ChannelLabel'].str.contains(base_label, regex=False)]
+
+            # also get macro rows to calculate vector trajectory (unit vector)
+            macro_coords = (MacroContacts() & f"patient_id = '{pt_id}'" & f"probe_id = '{macro['probe_id']}'" & f"config_id = '{macro['config_id']}'").fetch('native_x', 'native_y', 'native_z')
+            unit_vector = get_unit_vector(macro_coords)
+            adj_coords = np.array([macro["native_x"], macro["native_y"], macro["native_z"]])
+            adj_mni_coords = np.array([macro["mni305_x"], macro["mni305_y"], macro["mni305_z"]])
+            micro_coords = adj_coords + unit_vector * 3
+            micro_mni_coords = adj_mni_coords + unit_vector * 3
             # now add all micros for this macro
             insert_dict = {
                 'patient_id': pt_id,
                 'admission_id': admission_id,
                 'config_id': pt_probe_config_id,
                 'probe_id': macro['probe_id'],
+                'native_x': micro_coords[0],
+                'native_y': micro_coords[1],
+                'native_z': micro_coords[2],
+                'mni305_x': micro_mni_coords[0],
+                'mni305_y': micro_mni_coords[1],
+                'mni305_z': micro_mni_coords[2],
+                'mni152_x': None,
+                'mni152_y': None,
+                'mni152_z': None,
             }
-            for micro_row in micro_rows:
-                insert_dict['electrode_id'] = micro_row['id']
-                insert_dict['electrode_label'] = micro_row['name']
-                insert_dict['native_x'] = macro['native_x']
-                insert_dict['native_y'] = macro['native_y']
-                insert_dict['native_z'] = macro['native_z']
-                insert_dict['mni305_x'] = macro['mni305_x']
-                insert_dict['mni305_y'] = macro['mni305_y']
-                insert_dict['mni305_z'] = macro['mni305_z']
-                insert_dict['mni152_x'] = None
-                insert_dict['mni152_y'] = None
-                insert_dict['mni152_z'] = None
+            for idx, row in micro_rows.iterrows():
+                insert_dict['electrode_id'] = row.ElectrodeID
+                insert_dict['electrode_label'] = row.ChannelLabel
                 MicroContacts().insert1(insert_dict)
+
+
+def get_unit_vector(macro_coords):
+    coord_matrix = np.array(macro_coords).T
+    # 1️⃣ Compute the centroid of the points
+    centroid = np.mean(coord_matrix, axis=0)
+
+    # 2️⃣ Subtract the centroid to center the data
+    centered = coord_matrix - centroid
+
+    # 3️⃣ Do Singular Value Decomposition
+    _, _, vh = np.linalg.svd(centered)
+
+    # 4️⃣ The first row of vh (or first column of V) is the direction of max variance
+    direction = vh[0]
+
+    # 5️⃣ Normalize to get a unit vector
+    unit_vector = direction / np.linalg.norm(direction)
+    return unit_vector
 
 
 def parse_probe(label):
