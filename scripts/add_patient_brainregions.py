@@ -48,11 +48,8 @@ def get_patients():
     return patient_list
 
 def get_scan_files(patient):
-    if patient > "YFJ":
-        search_path = f"{PROJECTWORLDS_PATH}/{patient}_Datafile/IMG"
-    else:
-        search_path = f"{ECOG_PATH}/{patient}Datafile/IMG"
-    
+    search_path = f"{PROJECTWORLDS_PATH}/{patient}_Datafile/IMG"
+ 
     mri_glob = glob(f"{search_path}/*MRI*.nii")
     if len(mri_glob) == 0:
         mri_file = ''
