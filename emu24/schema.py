@@ -31,13 +31,6 @@ def get_emu_id(comment_text):
     emu_id = int(emu_match.group(1), 10) if emu_match else 99999
     return emu_id
 
-
-# Define the schema
-schema = dj.schema(DATABASE_NAME)
-conn = connect()
-
-
-
 # Define the schema
 schema = dj.schema(DATABASE_NAME)
 

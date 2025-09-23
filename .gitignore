@@ -14,3 +14,4 @@ scripts/.env*
 test*.ipynb
 task_ids.txt
 create_tables_mysql.sql
+add_existing_patient_example_chunks*.py
