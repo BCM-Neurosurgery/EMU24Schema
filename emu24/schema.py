@@ -70,9 +70,7 @@ class ProbeConfig(dj.Manual):
     pip_file: varchar(256)
     t1_file: varchar(256)
     """
-
-# 
-
+    
 @schema
 class Probes(dj.Manual):
     definition = """
@@ -86,6 +84,9 @@ class Probes(dj.Manual):
     hemisphere: varchar(64)
     manufacturer: varchar(64)
     type: varchar(64)
+    direction_x: float
+    direction_y: float
+    direction_z: float
     """
 
 @schema

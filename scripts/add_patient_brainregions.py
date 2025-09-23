@@ -214,6 +214,15 @@ def scrape_electrode_info(patients):
             # also get macro rows to calculate vector trajectory (unit vector)
             macro_coords = (MacroContacts() & f"patient_id = '{pt_id}'" & f"probe_id = '{macro['probe_id']}'" & f"config_id = '{macro['config_id']}'").fetch('native_x', 'native_y', 'native_z')
             unit_vector = get_unit_vector(macro_coords)
+
+            # add this unit vector to our Probe tables
+            probe_info = (Probes() & f"patient_id = '{pt_id}'" & f"probe_id = '{macro['probe_id']}'" & f"config_id = '{macro['config_id']}'").fetch1()
+            probe_info['direction_x'] = unit_vector[0]
+            probe_info['direction_y'] = unit_vector[1]
+            probe_info['direction_z'] = unit_vector[2]
+            Probes().update1(probe_info)
+
+            # now get micro coords
             adj_coords = np.array([macro["native_x"], macro["native_y"], macro["native_z"]])
             adj_mni_coords = np.array([macro["mni305_x"], macro["mni305_y"], macro["mni305_z"]])
             micro_coords = adj_coords + unit_vector * -3
