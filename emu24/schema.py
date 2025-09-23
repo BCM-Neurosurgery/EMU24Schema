@@ -12,7 +12,6 @@ from brpylib import NsxFile
 from pyNsXStitch.stitchers import StitchedNeVFile, StitchedNsXFile
 from pyNsXStitch.helpers import get_all_nev_comments
 import logging
-import pymysql
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG,
