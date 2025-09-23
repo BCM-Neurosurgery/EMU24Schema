@@ -70,7 +70,7 @@ class ProbeConfig(dj.Manual):
     pip_file: varchar(256)
     t1_file: varchar(256)
     """
-    
+
 @schema
 class Probes(dj.Manual):
     definition = """
@@ -126,7 +126,40 @@ class MicroContacts(dj.Manual):
     mni152_z: float
     """
 
-@schema
+@schema 
+class TargetRegions(dj.Lookup):
+    definition = """
+    region_id: int # primary key
+    ---
+    type: varchar(64)
+    regex: varchar(64)
+    region_name: varchar(64)
+    """
+    contents = [
+        [0, 'broad', 'F1', 'superior frontal gyrus'],
+        [1, 'broad', 'F2', 'middle frontal gyrus'],
+        [2, 'broad', 'F3', 'inferior frontal gyrus'],
+        [3, 'broad', 'P1', 'superior parietal lobule'],
+        [4, 'broad', 'P2', 'inferior parietal lobule'],
+        [5, 'broad', 'T1', 'superior temporal gyrus'],
+        [6, 'broad', 'T2', 'middle temporal gyrus'],
+        [7, 'broad', 'T3', 'inferior temporal gyrus'],
+        [8, 'broad', 'O1', 'superior occipital gyrus'],
+        [9, 'broad', 'O2', 'inferior occipital gyrus'],
+        [10, 'specific', '^(OF|OFC)[a-fA-F]?', 'orbitofrontal cortex'],
+        [11, 'specific', '^PH[a-fA-F]?', 'parahippocampal gyrus'].
+        [12, 'specific', '^(SMC|SMA)[a-fA-F]?', 'supplementary motor area'],
+        [13, 'specific', '^(ANT|AN)[a-fA-F]?', 'anterior nucleus thalamus'],
+        [14, 'specific', '^PVN[a-fA-F]?', 'paraventricular nucleus hypothalamus'],
+        [15, 'specific', '^CM[a-fA-F]?', 'centromedial nucleus thalamus'],
+        [16, 'specific', '^Pulv[a-fA-F]?', 'pulvinar'],
+        [17, 'specific', '^E[a-fA-F]?', 'entorhinal cortex'],
+        [18, 'specific', '^H[a-fA-F]?', 'hippocampus'],
+        [19, 'specific', '^C[a-fA-F]?', 'cingulate cortex'],
+        [20, 'specific', '^(I|INS)[a-fA-F]?', 'insula'],
+        [21, 'specific', '^A[a-fA-F]?', 'amygdala'],
+    ]
+
 class BaseAtlasInfo(dj.Manual):
     definition = """
     -> MacroContacts
