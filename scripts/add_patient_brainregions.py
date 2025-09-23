@@ -117,6 +117,8 @@ def scrape_electrode_info(patients):
             continue
         csv_path = path_match[0]
         electrode_df = pd.read_csv(csv_path)
+        # remove micro rows
+        electrode_df = electrode_df[electrode_df['Type'] != 'microwires']
 
         # also get montage df
         montage_file = f"{DATALAKE_PATH}/{patient}Datafile/INFO/{patient}_montage.xlsx"
