@@ -147,7 +147,7 @@ class TargetRegions(dj.Lookup):
         [8, 'broad', 'O1', 'superior occipital gyrus'],
         [9, 'broad', 'O2', 'inferior occipital gyrus'],
         [10, 'specific', '^(OF|OFC)[a-fA-F]?', 'orbitofrontal cortex'],
-        [11, 'specific', '^PH[a-fA-F]?', 'parahippocampal gyrus'].
+        [11, 'specific', '^PH[a-fA-F]?', 'parahippocampal gyrus'],
         [12, 'specific', '^(SMC|SMA)[a-fA-F]?', 'supplementary motor area'],
         [13, 'specific', '^(ANT|AN)[a-fA-F]?', 'anterior nucleus thalamus'],
         [14, 'specific', '^PVN[a-fA-F]?', 'paraventricular nucleus hypothalamus'],
@@ -159,7 +159,8 @@ class TargetRegions(dj.Lookup):
         [20, 'specific', '^(I|INS)[a-fA-F]?', 'insula'],
         [21, 'specific', '^A[a-fA-F]?', 'amygdala'],
     ]
-
+    
+@schema
 class BaseAtlasInfo(dj.Manual):
     definition = """
     -> MacroContacts

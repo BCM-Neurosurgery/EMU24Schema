@@ -5,36 +5,6 @@ import pandas as pd
 import numpy as np
 import re
 
-# Mapping for broad region codes\ 
-BROAD_MAP = {
-    'F1': 'superior frontal gyrus',
-    'F2': 'middle frontal gyrus',
-    'F3': 'inferior frontal gyrus',
-    'P1': 'superior parietal lobule',
-    'P2': 'inferior parietal lobule',
-    'T1': 'superior temporal gyrus',
-    'T2': 'middle temporal gyrus',
-    'T3': 'inferior temporal gyrus',
-    'O1': 'superior occipital gyrus',
-    'O2': 'inferior occipital gyrus',
-}
-
-# Mapping for specific region prefixes
-SPECIFIC_MAP = [
-    (r'^(OF|OFC)[a-fA-F]?', 'orbitofrontal cortex'),
-    (r'^PH[a-fA-F]?', 'parahippocampal gyrus'),
-    (r'^(SMC|SMA)[a-fA-F]?', 'supplementary motor area'),
-    (r'^(ANT|AN)[a-fA-F]?', 'anterior nucleus thalamus'),
-    (r'^PVN[a-fA-F]?', 'paraventricular nucleus hypothalamus'),
-    (r'^CM[a-fA-F]?', 'centromedial nucleus thalamus'),
-    (r'^Pulv[a-fA-F]?', 'pulvinar'),
-    (r'^E[a-fA-F]?', 'entorhinal cortex'),
-    (r'^H[a-fA-F]?', 'hippocampus'),
-    (r'^C[a-fA-F]?', 'cingulate cortex'),
-    (r'^(I|INS)[a-fA-F]?', 'insula'),
-    (r'^A[a-fA-F]?', 'amygdala'),
-]
-
 # Regex to split probe name
 PATTERN = re.compile(r'^([LR])'               # Side L or R
                      r'([TFPO][1-3][a-f]?)'   # Broad code
@@ -73,6 +43,21 @@ def get_scan_files(patient):
     return mri_file, ct_file, pip_file, t1_file
 
 def scrape_electrode_info(patients):
+    # first load target region maps
+    broad_res = (TargetRegions() & f"type = 'broad'").fetch('regex', 'region_name')
+    entries = len(broad_res[0])
+    BROAD_MAP = {}
+    for i in range(entries):
+        BROAD_MAP[broad_res[0][i]] = broad_res[1][i]
+
+    specific_res = (TargetRegions() & f"type = 'broad'").fetch('regex', 'region_name')
+    SPECIFIC_MAP = []
+    entries = len(specific_res[0])
+    for i in range(entries):
+        SPECIFIC_MAP.append(
+            (specific_res[0][i], specific_res[1][i])
+        )
+
     # get their electrode csv path
     for patient in patients:
         # get patient and admission for proper unique key
@@ -199,10 +184,21 @@ def scrape_electrode_info(patients):
                 insert_dict['Matter_fs_vox'] = row['Matter_fs_vox'] if isinstance(row['Matter_fs_vox'], str) else None
 
                 # now insert
-                BaseAtlasInfo().insert1(insert_dict)               
+                BaseAtlasInfo().insert1(insert_dict)
+            # now get unit vector and update our probe
+            all_macros = (MacroContacts() & f"patient_id = '{pt_id}'" & f"config_id = '{pt_probe_config_id}'" &  f"probe_id = '{idx}'").fetch('native_x', 'native_y', 'native_z')
+            unit_vector = get_unit_vector(all_macros)
+            insert_dict = (Probes() & f"patient_id = '{pt_id}'" & f"config_id = '{pt_probe_config_id}'" &  f"probe_id = '{idx}'").fetch1()
+            insert_dict["direction_x"] = unit_vector[0]
+            insert_dict["direction_y"] = unit_vector[1]
+            insert_dict["direction_z"] = unit_vector[2]
+            Probes().update1(insert_dict)
+
+
+
         # now populate micro contacts for this patient
         # get all micro adjacent macros for this patient
-        micro_adjacent_macros = (MacroContacts() & f"patient_id = '{pt_id}'" & "micro_adjacent = '1'").fetch(as_dict=True)
+        micro_adjacent_macros = (MacroContacts() & f"patient_id = '{pt_id}'" & f"config_id = '{pt_probe_config_id}'" & "micro_adjacent = '1'").fetch(as_dict=True)
        
         # now add all micro by macro
         electrode_df['BaseLabel'] 
@@ -214,13 +210,6 @@ def scrape_electrode_info(patients):
             # also get macro rows to calculate vector trajectory (unit vector)
             macro_coords = (MacroContacts() & f"patient_id = '{pt_id}'" & f"probe_id = '{macro['probe_id']}'" & f"config_id = '{macro['config_id']}'").fetch('native_x', 'native_y', 'native_z')
             unit_vector = get_unit_vector(macro_coords)
-
-            # add this unit vector to our Probe tables
-            probe_info = (Probes() & f"patient_id = '{pt_id}'" & f"probe_id = '{macro['probe_id']}'" & f"config_id = '{macro['config_id']}'").fetch1()
-            probe_info['direction_x'] = unit_vector[0]
-            probe_info['direction_y'] = unit_vector[1]
-            probe_info['direction_z'] = unit_vector[2]
-            Probes().update1(probe_info)
 
             # now get micro coords
             adj_coords = np.array([macro["native_x"], macro["native_y"], macro["native_z"]])
