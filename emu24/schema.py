@@ -3,11 +3,9 @@ from pathlib import Path
 
 import datajoint as dj
 import re
-from datajoint.external import ExternalTable
 import os
 import warnings
-from emu24.settings import DATABASE_NAME, STITCHED_PATH, LOGGING_PATH, DJ_DATABASE_HOST, DJ_DATABASE_PORT
-from emu24.helper import connect
+from emu24.settings import DATABASE_NAME, STITCHED_PATH, LOGGING_PATH
 from brpylib import NsxFile
 from pyNsXStitch.stitchers import StitchedNeVFile, StitchedNsXFile
 from pyNsXStitch.helpers import get_all_nev_comments
@@ -159,19 +157,55 @@ class TargetRegions(dj.Lookup):
         [20, 'specific', '^(I|INS)[a-fA-F]?', 'insula'],
         [21, 'specific', '^A[a-fA-F]?', 'amygdala'],
     ]
-    
+
 @schema
-class BaseAtlasInfo(dj.Manual):
+class RoiD2009(dj.Manual):
     definition = """
     -> MacroContacts
     ---
-    ROI_D2009_3mm: varchar(64)
-    Matter_3mm: varchar(64)
-    ROI_DK2005_3mm: varchar(64)
-    ROI_XTRACT_3mm: varchar(64)
-    Area_fs_vox: varchar(64)
-    Matter_fs_vox: varchar(64)
+    roi_d2009_3mm: varchar(64)
     """
+
+@schema
+class Matter(dj.Manual):
+    definition = """
+    -> MacroContacts
+    ---
+    matter_3mm: varchar(64)
+    """
+    
+@schema 
+class RoiDk2005(dj.Manual):
+    definition = """
+    -> MacroContacts
+    ---
+    roi_dk2005_3mm: varchar(64)
+    """
+
+@schema 
+class RoiXtract(dj.Manual):
+    definition = """
+    -> MacroContacts
+    ---
+    roi_xtract_3mm: varchar(64)
+    """
+
+@schema 
+class AreaFsVox(dj.Manual):
+    definition = """
+    -> MacroContacts
+    ---
+    area_fs_vox: varchar(64)
+    """
+
+@schema 
+class MatterFsVox(dj.Manual):
+    definition = """
+    -> MacroContacts
+    ---
+    matter_fs_vox: varchar(64)
+    """
+    
 
 @schema
 class TOCInstance(dj.Manual):

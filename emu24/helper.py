@@ -37,7 +37,6 @@ def connect(cmd_line_args=None, username=None, password=None):
     dj.config['database.port'] = settings.DJ_DATABASE_PORT
     dj.config['safemode'] = settings.DJ_CONFIG_SAFEMODE
     dj.config['stores'] = settings.DJ_CONFIG_STORES
-    dj.config["filepath_checksum_size_limit"] = 0
 
     print(f'Connecting...')
     return dj.conn()

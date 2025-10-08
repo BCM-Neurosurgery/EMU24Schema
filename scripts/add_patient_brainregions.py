@@ -134,7 +134,7 @@ def scrape_electrode_info(patients):
             type_ = probe_df.iloc[0].Type
             # put all into dict
             insert_dict["micros_available"] = int(micros_available)
-            insert_dict["region_target"] = parse_probe(label)['final_name']
+            insert_dict["region_target"] = parse_probe(label, BROAD_MAP, SPECIFIC_MAP)['final_name']
             insert_dict['n_contacts'] = no_contacts
             insert_dict['hemisphere'] = hemisphere if isinstance(hemisphere, str) else None
             insert_dict['manufacturer'] = manufacturer if isinstance(manufacturer, str) else None
@@ -175,16 +175,32 @@ def scrape_electrode_info(patients):
                     'probe_id': idx,
                     'electrode_id': row.ElectrodeID,
                 }
-      
-                insert_dict['ROI_D2009_3mm'] = row['ROI_D2009_3mm'] if isinstance(row['ROI_D2009_3mm'], str) else None
-                insert_dict['Matter_3mm'] = row['Matter_3mm'] if isinstance(row['Matter_3mm'], str) else None
-                insert_dict['ROI_DK2005_3mm'] = row['ROI_DK2005_3mm'] if isinstance(row['ROI_DK2005_3mm'], str) else None
-                insert_dict['ROI_XTRACT_3mm'] = row['ROI_XTRACT_3mm'] if isinstance(row['ROI_XTRACT_3mm'], str) else None
-                insert_dict['Area_fs_vox'] = row['Area_fs_vox'] if isinstance(row['Area_fs_vox'], str) else None
-                insert_dict['Matter_fs_vox'] = row['Matter_fs_vox'] if isinstance(row['Matter_fs_vox'], str) else None
 
-                # now insert
-                BaseAtlasInfo().insert1(insert_dict)
+                # insert all atlas info
+                insert_dict['roi_d2009_3mm'] = row['ROI_D2009_3mm'] if isinstance(row['ROI_D2009_3mm'], str) else None
+                RoiD2009().insert1(insert_dict)
+                del insert_dict['roi_d2009_3mm']
+                
+                insert_dict['matter_3mm'] = row['Matter_3mm'] if isinstance(row['Matter_3mm'], str) else None
+                Matter().insert1(insert_dict)
+                del insert_dict['matter_3mm']
+                
+                insert_dict['roi_dk2005_3mm'] = row['ROI_DK2005_3mm'] if isinstance(row['ROI_DK2005_3mm'], str) else None
+                RoiDk2005().insert1(insert_dict)
+                del insert_dict['roi_dk2005_3mm']
+                
+                insert_dict['roi_xtract_3mm'] = row['ROI_XTRACT_3mm'] if isinstance(row['ROI_XTRACT_3mm'], str) else None
+                RoiXtract().insert1(insert_dict)
+                del insert_dict['roi_xtract_3mm']
+                
+                insert_dict['area_fs_vox'] = row['Area_fs_vox'] if isinstance(row['Area_fs_vox'], str) else None
+                AreaFsVox().insert1(insert_dict)
+                del insert_dict['area_fs_vox']
+                
+                insert_dict['matter_fs_vox'] = row['Matter_fs_vox'] if isinstance(row['Matter_fs_vox'], str) else None
+                MatterFsVox().insert1(insert_dict)
+                del insert_dict['matter_fs_vox']
+
             # now get unit vector and update our probe
             all_macros = (MacroContacts() & f"patient_id = '{pt_id}'" & f"config_id = '{pt_probe_config_id}'" &  f"probe_id = '{idx}'").fetch('native_x', 'native_y', 'native_z')
             unit_vector = get_unit_vector(all_macros)
@@ -258,7 +274,7 @@ def get_unit_vector(macro_coords):
     return unit_vector
 
 
-def parse_probe(label):
+def parse_probe(label, BROAD_MAP, SPECIFIC_MAP):
     """
     Parse a probe label into its components and construct a descriptive name.
     Returns a dict with keys: broad_raw, broad_name, has_lesion, lesion_raw,
@@ -317,8 +333,6 @@ def parse_probe(label):
         'final_name': final
     }
 
-
-   
 
 if __name__ == '__main__':
     # args = login_parser.parse_args()
