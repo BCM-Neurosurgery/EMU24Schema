@@ -39,7 +39,7 @@ def connect(cmd_line_args=None, username=None, password=None):
     dj.config['stores'] = settings.DJ_CONFIG_STORES
 
     print(f'Connecting...')
-    dj.conn()
+    return dj.conn()
 
 
 if __name__ == "__main__":

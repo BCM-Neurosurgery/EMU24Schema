@@ -29,7 +29,6 @@ def get_emu_id(comment_text):
     emu_id = int(emu_match.group(1), 10) if emu_match else 99999
     return emu_id
 
-
 # Define the schema
 schema = dj.schema(DATABASE_NAME)
 
@@ -44,7 +43,6 @@ class Patient(dj.Manual):
     emu_id: varchar(256)
     """
 
-
 @schema
 class Admission(dj.Manual):
     definition = """
@@ -54,6 +52,160 @@ class Admission(dj.Manual):
     admission_date: varchar(256)  # secondary attribute
     """
 
+# schema table for electrode config? - dependant on admission
+# keys - timestamp, foreign keys - admission
+
+@schema 
+class ProbeConfig(dj.Manual):
+    definition = """
+    -> Admission
+    config_id: int # primary key
+    ---
+    start_time: varchar(256)
+    end_time: varchar(256)
+    mri_file: varchar(256)
+    ct_file: varchar(256)
+    pip_file: varchar(256)
+    t1_file: varchar(256)
+    """
+
+@schema
+class Probes(dj.Manual):
+    definition = """
+    -> ProbeConfig
+    probe_id: int # primary key
+    ---
+    label: varchar(64)
+    region_target: varchar(64)
+    micros_available: bool
+    n_contacts: int
+    hemisphere: varchar(64)
+    manufacturer: varchar(64)
+    type: varchar(64)
+    direction_x: float
+    direction_y: float
+    direction_z: float
+    """
+
+@schema
+class MacroContacts(dj.Manual):
+    definition = """
+    -> Probes
+    electrode_id: int # primary key
+    ---
+    electrode_label: varchar(64)
+    micro_adjacent: bool
+    native_x: float
+    native_y: float
+    native_z: float
+    mni305_x: float
+    mni305_y: float
+    mni305_z: float
+    mni152_x: float
+    mni152_y: float
+    mni152_z: float
+    """
+
+@schema
+class MicroContacts(dj.Manual):
+    definition = """
+    -> Probes
+    electrode_id: int # primary key
+    ---
+    electrode_label: varchar(64)
+    native_x: float
+    native_y: float
+    native_z: float
+    mni305_x: float
+    mni305_y: float
+    mni305_z: float
+    mni152_x: float
+    mni152_y: float
+    mni152_z: float
+    """
+
+@schema 
+class TargetRegions(dj.Lookup):
+    definition = """
+    region_id: int # primary key
+    ---
+    type: varchar(64)
+    regex: varchar(64)
+    region_name: varchar(64)
+    """
+    contents = [
+        [0, 'broad', 'F1', 'superior frontal gyrus'],
+        [1, 'broad', 'F2', 'middle frontal gyrus'],
+        [2, 'broad', 'F3', 'inferior frontal gyrus'],
+        [3, 'broad', 'P1', 'superior parietal lobule'],
+        [4, 'broad', 'P2', 'inferior parietal lobule'],
+        [5, 'broad', 'T1', 'superior temporal gyrus'],
+        [6, 'broad', 'T2', 'middle temporal gyrus'],
+        [7, 'broad', 'T3', 'inferior temporal gyrus'],
+        [8, 'broad', 'O1', 'superior occipital gyrus'],
+        [9, 'broad', 'O2', 'inferior occipital gyrus'],
+        [10, 'specific', '^(OF|OFC)[a-fA-F]?', 'orbitofrontal cortex'],
+        [11, 'specific', '^PH[a-fA-F]?', 'parahippocampal gyrus'],
+        [12, 'specific', '^(SMC|SMA)[a-fA-F]?', 'supplementary motor area'],
+        [13, 'specific', '^(ANT|AN)[a-fA-F]?', 'anterior nucleus thalamus'],
+        [14, 'specific', '^PVN[a-fA-F]?', 'paraventricular nucleus hypothalamus'],
+        [15, 'specific', '^CM[a-fA-F]?', 'centromedial nucleus thalamus'],
+        [16, 'specific', '^Pulv[a-fA-F]?', 'pulvinar'],
+        [17, 'specific', '^E[a-fA-F]?', 'entorhinal cortex'],
+        [18, 'specific', '^H[a-fA-F]?', 'hippocampus'],
+        [19, 'specific', '^C[a-fA-F]?', 'cingulate cortex'],
+        [20, 'specific', '^(I|INS)[a-fA-F]?', 'insula'],
+        [21, 'specific', '^A[a-fA-F]?', 'amygdala'],
+    ]
+
+@schema
+class RoiD2009(dj.Manual):
+    definition = """
+    -> MacroContacts
+    ---
+    roi_d2009_3mm: varchar(64)
+    """
+
+@schema
+class Matter(dj.Manual):
+    definition = """
+    -> MacroContacts
+    ---
+    matter_3mm: varchar(64)
+    """
+    
+@schema 
+class RoiDk2005(dj.Manual):
+    definition = """
+    -> MacroContacts
+    ---
+    roi_dk2005_3mm: varchar(64)
+    """
+
+@schema 
+class RoiXtract(dj.Manual):
+    definition = """
+    -> MacroContacts
+    ---
+    roi_xtract_3mm: varchar(64)
+    """
+
+@schema 
+class AreaFsVox(dj.Manual):
+    definition = """
+    -> MacroContacts
+    ---
+    area_fs_vox: varchar(64)
+    """
+
+@schema 
+class MatterFsVox(dj.Manual):
+    definition = """
+    -> MacroContacts
+    ---
+    matter_fs_vox: varchar(64)
+    """
+    
 
 @schema
 class TOCInstance(dj.Manual):
