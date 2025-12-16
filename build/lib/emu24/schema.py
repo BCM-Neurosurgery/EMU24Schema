@@ -304,7 +304,7 @@ class NSPChunks(dj.Computed):
 
             # Insert into database
             self.insert1(key)
-        except Exception as e:
+        except dj.DataJointError as e:
             print(f"Failed to insert key {key}: {e}")
             with open('populate_errors.log', 'a') as f:
                 f.write(f"Failed to insert key {key}: {e}\n")
