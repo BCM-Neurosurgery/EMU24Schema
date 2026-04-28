@@ -8,13 +8,13 @@ def populate_all():
     NSPChunks().populate(display_progress=True)
 
     print('Searching for task comments...')
-    TaskComments().populate(display_progress=True)
-    StartComments().populate(display_progress=True)
-    TaskIDComments().populate(display_progress=True)
-    StopComments().populate(display_progress=True)
+    TaskComments().populate(display_progress=True, suppress_errors=True)
+    StartComments().populate(display_progress=True, suppress_errors=True)
+    TaskIDComments().populate(display_progress=True, suppress_errors=True)
+    StopComments().populate(display_progress=True, suppress_errors=True)
 
     print('Stitching new data...')
-    StitchedChunks().populate(display_progress=True)
+    StitchedChunks().populate(display_progress=True, suppress_errors=True)
 
 
 def populate_patient(patient_name):
@@ -32,16 +32,16 @@ def populate_patient(patient_name):
     restriction = f'patient_id={patient_id}'
 
     print('Collecting matching NSP data chunks...')
-    NSPChunks().populate(restriction, display_progress=True)
+    NSPChunks().populate(restriction, display_progress=True, suppress_errors=True)
 
     print('Searching for task comments...')
-    TaskComments().populate(restriction, display_progress=True)
-    StartComments().populate(restriction, display_progress=True)
-    TaskIDComments().populate(restriction, display_progress=True)
-    StopComments().populate(restriction, display_progress=True)
+    TaskComments().populate(restriction, display_progress=True, suppress_errors=True)
+    StartComments().populate(restriction, display_progress=True, suppress_errors=True)
+    TaskIDComments().populate(restriction, display_progress=True, suppress_errors=True)
+    StopComments().populate(restriction, display_progress=True, suppress_errors=True)
 
     print('Stitching new data...')
-    StitchedChunks().populate(restriction, display_progress=True)
+    StitchedChunks().populate(restriction, display_progress=True, suppress_errors=True)
 
 def list_available_patients():
     patients = Patient().fetch('patient_id', 'emu_id', 'dob')
