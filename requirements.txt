@@ -1,4 +1,5 @@
-datajoint
+setuptools<82
+datajoint<=0.14
 numpy
 scipy
 brpylib @ git+ssh://git@github.com/BCM-Neurosurgery/Blackrock-Python-Utilities.git@main
