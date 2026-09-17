@@ -463,11 +463,13 @@ def imputed_gap_to_row(imputed: ImputedGap) -> dict:
     }
 
 
-def fetch_admissions(patient_emu_id=None):
+def fetch_admissions(patient_emu_id=None, exclude_emu_ids=None):
     from emu24.schema import Patient, Admission
     query = Patient * Admission
     if patient_emu_id:
         query = query & f'emu_id="{patient_emu_id}"'
+    for excluded in exclude_emu_ids or []:
+        query = query & f'emu_id!="{excluded}"'
     rows = query.fetch('patient_id', 'emu_id', 'admission_id', as_dict=True)
     # DataJoint returns numpy scalar types (e.g. numpy.int64) for int attributes, not plain
     # Python ints - harmless individually (str()s the same), but repr()s ugly (np.int64(43)) the
@@ -507,8 +509,8 @@ def load_completed_patients(visit_out_path):
         return {int(row['patient_id']) for row in csv.DictReader(f)}
 
 
-def main(patient_emu_id, gap_out_path, visit_out_path, imputed_out_path):
-    admissions = fetch_admissions(patient_emu_id)
+def main(patient_emu_id, gap_out_path, visit_out_path, imputed_out_path, exclude_emu_ids=None):
+    admissions = fetch_admissions(patient_emu_id, exclude_emu_ids)
     total_clock_corruptions = 0
     toc_order_mismatch_patients = set()
 
@@ -582,6 +584,10 @@ if __name__ == '__main__':
         add_help=False,
     )
     arg_parser.add_argument('--patient', type=str, help='Restrict to the patient with this EMU identifier')
+    arg_parser.add_argument(
+        '--exclude', type=str, action='append', default=[], metavar='EMU-ID',
+        help='Exclude the patient with this EMU identifier from the analysis (repeatable)'
+    )
     arg_parser.add_argument('--gap-out', type=str, default='gap_summary.csv')
     arg_parser.add_argument('--visit-out', type=str, default='visit_summary.csv')
     arg_parser.add_argument('--imputed-out', type=str, default='imputed_gaps.csv')
@@ -589,4 +595,4 @@ if __name__ == '__main__':
 
     connect(args)
 
-    main(args.patient, args.gap_out, args.visit_out, args.imputed_out)
+    main(args.patient, args.gap_out, args.visit_out, args.imputed_out, args.exclude)
