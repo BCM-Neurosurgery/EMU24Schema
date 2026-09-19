@@ -32,13 +32,21 @@ in practice. A file that fails this is recorded as corrupt/an issue and simply s
 round-about fallback path resolution - since file issues have turned out to be rare enough not to
 need special-casing.
 
+Processed and resumable per patient, same as data_coverage.py: if the output file already exists,
+any patient with a row already in it is treated as fully processed and skipped, and new rows are
+appended rather than overwriting. If a previous run died partway through a patient, that patient's
+rows are never partially written (each patient's rows are buffered in memory and only written
+once every one of their stitched tasks has been audited), so resuming is always safe.
+
 Usage:
-    python scripts/stitched_file_audit.py [--out stitched_file_audit.csv]
+    python scripts/stitched_file_audit.py [--patient EMU-ID] [--exclude EMU-ID]
+        [--out stitched_file_audit.csv]
 """
 
 import argparse
 import csv
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -103,16 +111,45 @@ def comment_utc(schema_module, chunk_identifiers, comment_id):
     return origin_utc + timedelta(seconds=(raw_ts - first_tick) / ts_resolution)
 
 
-def audit(schema_module):
+def fetch_patients(schema_module, patient_emu_id=None, exclude_emu_ids=None):
+    """Every patient with at least one StitchedChunks row, as (patient_id, emu_id) dicts."""
+    Patient = schema_module.Patient
+    StitchedChunks = schema_module.StitchedChunks
+    query = Patient & StitchedChunks
+    if patient_emu_id:
+        query = query & f'emu_id="{patient_emu_id}"'
+    for excluded in exclude_emu_ids or []:
+        query = query & f'emu_id!="{excluded}"'
+    rows = query.fetch('patient_id', 'emu_id', as_dict=True)
+    # DataJoint returns numpy scalar types (e.g. numpy.int64) for int attributes - normalize at
+    # the fetch boundary, same as data_coverage.py's fetch_admissions.
+    return [{**row, 'patient_id': int(row['patient_id'])} for row in rows]
+
+
+def load_completed_patients(out_path):
+    """
+    Patients that already have a row in the output CSV are treated as fully done.
+
+    A patient's rows are only ever written (see main) after every one of their stitched tasks has
+    been audited without error, so this is a safe completion marker even if a previous run died
+    partway through a patient - no partial rows for that patient are ever on disk to begin with.
+    """
+    if not os.path.exists(out_path):
+        return set()
+    with open(out_path, newline='') as f:
+        return {int(row['patient_id']) for row in csv.DictReader(f)}
+
+
+def audit_patient(schema_module, patient_id):
     table = schema_module.StitchedChunks()
     heading = table.heading
     plain_attrs = [n for n in heading.names if not heading.attributes[n].is_filepath]
     pk_attrs = heading.primary_key
     chunk_identifiers = schema_module.StitchedChunks.chunk_identifiers
 
-    rows = table.fetch(*plain_attrs, as_dict=True)
+    rows = (table & {'patient_id': patient_id}).fetch(*plain_attrs, as_dict=True)
 
-    for row in tqdm(rows, desc='Auditing stitched tasks', miniters=10):
+    for row in tqdm(rows, desc=f'Auditing patient {patient_id}', miniters=10):
         key_dict = {p: row[p] for p in pk_attrs}
         out_row = dict(row)
         issues = []
@@ -169,6 +206,45 @@ def audit(schema_module):
         yield out_row
 
 
+def main(schema_module, out_path, patient_emu_id=None, exclude_emu_ids=None):
+    patients = fetch_patients(schema_module, patient_emu_id, exclude_emu_ids)
+
+    completed_patients = load_completed_patients(out_path)
+    if completed_patients:
+        print(f'Resuming: {len(completed_patients)} patient(s) already have rows in {out_path}, skipping them')
+
+    out_exists = os.path.exists(out_path)
+    total_written = 0
+
+    with open(out_path, 'a' if out_exists else 'w', newline='') as f:
+        writer = None
+        for patient in patients:
+            if patient['patient_id'] in completed_patients:
+                print(f"Skipping patient {patient['emu_id']} (already complete)")
+                continue
+
+            print(f"Auditing patient {patient['emu_id']}...")
+            patient_rows = list(audit_patient(schema_module, patient['patient_id']))
+            if not patient_rows:
+                print('  No stitched tasks found, skipping')
+                continue
+
+            if writer is None:
+                # StitchedChunks' own non-filepath attribute names are discovered at runtime (see
+                # audit_patient()), so the column order is only known once we have a row.
+                base_fields = [k for k in patient_rows[0].keys() if k not in ADDED_FIELDS]
+                writer = csv.DictWriter(f, fieldnames=base_fields + ADDED_FIELDS)
+                if not out_exists:
+                    writer.writeheader()
+
+            writer.writerows(patient_rows)
+            f.flush()
+            total_written += len(patient_rows)
+            print(f'  {len(patient_rows)} row(s) written')
+
+    print(f'\nWrote {total_written} row(s) to {out_path} this run')
+
+
 if __name__ == '__main__':
     from emu24.helper import make_login_parser, connect
 
@@ -177,22 +253,15 @@ if __name__ == '__main__':
         description='Audit whether stitched task files are corrupt, their last-modified time, and approximate data range.',
         add_help=False,
     )
+    arg_parser.add_argument('--patient', type=str, help='Restrict to the patient with this EMU identifier')
+    arg_parser.add_argument(
+        '--exclude', type=str, action='append', default=[], metavar='EMU-ID',
+        help='Exclude the patient with this EMU identifier from the analysis (repeatable)'
+    )
     arg_parser.add_argument('--out', type=str, default='stitched_file_audit.csv')
     args = arg_parser.parse_args()
 
     connect(args)
     import emu24.schema as schema_module
 
-    out_rows = list(audit(schema_module))
-
-    # StitchedChunks' own non-filepath attribute names are discovered at runtime (see audit()),
-    # so the column order is only known once we have at least one row.
-    base_fields = [k for k in out_rows[0].keys() if k not in ADDED_FIELDS] if out_rows else []
-    fieldnames = base_fields + ADDED_FIELDS
-
-    with open(args.out, 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(out_rows)
-
-    print(f'Wrote {len(out_rows)} row(s) to {args.out}')
+    main(schema_module, args.out, args.patient, args.exclude)
