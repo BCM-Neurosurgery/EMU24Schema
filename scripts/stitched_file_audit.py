@@ -117,8 +117,12 @@ def audit_patient(schema_module, patient_id, emu_id):
 
     for row in tqdm(rows, desc=f'Auditing patient {emu_id}', miniters=10):
         key_dict = {p: row[p] for p in pk_attrs}
-        # patient_id/admission_id are only needed to query the DB (key_dict, above) - the
-        # human-readable emu_id identifies the patient in the output instead.
+        # StitchedChunks has its OWN 'emu_id' column - an unrelated integer task-sequence number
+        # parsed from "EMU-####" in a task comment (see StartComments/get_emu_id in schema.py),
+        # not the human-readable patient emu_id from the Patient table. Rename it to task_emu_id
+        # so it doesn't collide with (and silently overwrite) the patient identifier below.
+        # patient_id/admission_id are only needed to query the DB (key_dict, above).
+        row = {('task_emu_id' if k == 'emu_id' else k): v for k, v in row.items()}
         out_row = {'emu_id': emu_id, **{k: v for k, v in row.items() if k not in ('patient_id', 'admission_id')}}
         issues = []
         mtimes = []
