@@ -106,17 +106,13 @@ def comment_utc(schema_module, chunk_identifiers, comment_id):
 
 def fetch_patients(schema_module, patient_emu_id=None, exclude_emu_ids=None):
     """Every patient with at least one StitchedChunks row, as (patient_id, emu_id) dicts."""
-    Patient = schema_module.Patient
-    StitchedChunks = schema_module.StitchedChunks
-    query = Patient & StitchedChunks
+    query = schema_module.Patient
     if patient_emu_id:
         query = query & f'emu_id="{patient_emu_id}"'
     for excluded in exclude_emu_ids or []:
         query = query & f'emu_id!="{excluded}"'
     rows = query.fetch('patient_id', 'emu_id', as_dict=True)
-    # DataJoint returns numpy scalar types (e.g. numpy.int64) for int attributes - normalize at
-    # the fetch boundary, same as data_coverage.py's fetch_admissions.
-    return [{**row, 'patient_id': int(row['patient_id'])} for row in rows]
+    return rows
 
 
 def load_completed_patients(out_path):
