@@ -94,7 +94,7 @@ def fetch_patients(schema_module, patient_emu_id=None, exclude_emu_ids=None):
 
 def load_completed_patients(out_path):
     """
-    Patients that already have a row in the output CSV are treated as fully done.
+    Patients (by emu_id) that already have a row in the output CSV are treated as fully done.
 
     A patient's rows are only ever written (see main) after every one of their stitched tasks has
     been audited without error, so this is a safe completion marker even if a previous run died
@@ -103,10 +103,10 @@ def load_completed_patients(out_path):
     if not os.path.exists(out_path):
         return set()
     with open(out_path, newline='') as f:
-        return {int(row['patient_id']) for row in csv.DictReader(f)}
+        return {row['emu_id'] for row in csv.DictReader(f)}
 
 
-def audit_patient(schema_module, patient_id):
+def audit_patient(schema_module, patient_id, emu_id):
     table = schema_module.StitchedChunks()
     heading = table.heading
     plain_attrs = [n for n in heading.names if not heading.attributes[n].is_filepath]
@@ -115,9 +115,11 @@ def audit_patient(schema_module, patient_id):
 
     rows = (table & {'patient_id': patient_id, 'nsp_id': NSP_ID}).fetch(*plain_attrs, as_dict=True)
 
-    for row in tqdm(rows, desc=f'Auditing patient {patient_id}', miniters=10):
+    for row in tqdm(rows, desc=f'Auditing patient {emu_id}', miniters=10):
         key_dict = {p: row[p] for p in pk_attrs}
-        out_row = dict(row)
+        # patient_id/admission_id are only needed to query the DB (key_dict, above) - the
+        # human-readable emu_id identifies the patient in the output instead.
+        out_row = {'emu_id': emu_id, **{k: v for k, v in row.items() if k not in ('patient_id', 'admission_id')}}
         issues = []
         mtimes = []
         corrupt = False
@@ -186,12 +188,12 @@ def main(schema_module, out_path, patient_emu_id=None, exclude_emu_ids=None):
     with open(out_path, 'a' if out_exists else 'w', newline='') as f:
         writer = None
         for patient in patients:
-            if patient['patient_id'] in completed_patients:
+            if patient['emu_id'] in completed_patients:
                 print(f"Skipping patient {patient['emu_id']} (already complete)")
                 continue
 
             print(f"Auditing patient {patient['emu_id']}...")
-            patient_rows = list(audit_patient(schema_module, patient['patient_id']))
+            patient_rows = list(audit_patient(schema_module, patient['patient_id'], patient['emu_id']))
             if not patient_rows:
                 print('  No stitched tasks found, skipping')
                 continue
