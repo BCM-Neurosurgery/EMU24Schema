@@ -125,7 +125,12 @@ def audit(schema_module):
 
             try:
                 value = (table & key_dict).fetch1(file_attr)
-            except DataJointError as e:
+            except (DataJointError, OSError) as e:
+                # DataJointError covers a corrupt/replaced file (size or hash mismatch).
+                # OSError (FileNotFoundError included) covers a file that's missing outright -
+                # DataJoint's own checksum check does Path(local_filepath).stat() internally and
+                # raises that directly, before it ever gets a chance to raise a DataJointError.
+                logging.error(f'{filetype} fetch failed for {key_dict}: {e}')
                 out_row[f'{filetype}_path'] = None
                 corrupt = True
                 issues.append(f'{filetype}: {e}')
@@ -153,6 +158,9 @@ def audit(schema_module):
             out_row['data_start_utc'] = start_utc.isoformat()
             out_row['data_end_utc'] = end_utc.isoformat()
         except Exception as e:
+            # Already crash-safe (bare Exception covers FileNotFoundError/OSError too), but the
+            # failure was only ever recorded in the CSV's issue column - log it too.
+            logging.error(f'could not determine data range for {key_dict}: {e}')
             out_row['data_start_utc'] = None
             out_row['data_end_utc'] = None
             issues.append(f'could not determine data range: {e}')
