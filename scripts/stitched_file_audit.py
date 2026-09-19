@@ -1,42 +1,15 @@
 """
-Standalone analysis script: for every stitched task (StitchedChunks row), record whether any of
-its output files are corrupt, its last-modified time, and its approximate UTC data start/end.
-
-One row per task: a task's nev/ns3/ns5 files are cut/verified together, so corrupt and
-last_modified_utc are single per-task values (a task is corrupt if ANY of its present files are;
-last_modified_utc is the latest mtime among them), not one set per filetype. Per-file paths are
-still reported, purely as identifying info for locating a flagged file.
-
-The data range comes from the raw start/stop task-comment timestamps (StartComments.timestamp/
-StopComments.timestamp - the exact ticks used to define the stitching boundaries when the file
-was created, per StitchedChunks.make()/do_stitching), not by re-scanning the stitched file's own
-packets. Each comment's originating raw chunk (patient_id/admission_id/toc_id/nsp_id/chunk_id,
-looked up via TaskComments) is resolved to its NS3/NS5 file (preferring ns5, matching this
-pipeline's convention elsewhere - see data_coverage.py), whose header TimeOrigin anchors the
-comment's raw tick to UTC the same way data_coverage.py anchors packet ticks: PTP ticks (FileSpec
->=3) are an absolute, continuously-running counter, not reset to 0 per file, so
-pyNsXStitch.helpers.get_nsx_start_timestamp (tested elsewhere in this pipeline) gives that chunk
-file's own zero-reference tick. NEV is never used for timing - it holds event packets, not a
-uniform sample stream, so its own timestamps aren't a reliable proxy for a task's actual
-start/end.
-
-Corruption check: this script exists to find out whether stitched files are corrupt, so every
-filepath column touched (StitchedChunks.nev_file/ns3_file/ns5_file, and the original chunk's
-ns3_file/ns5_file used for the data range) is fetched the normal DataJoint way -
-(table & key).fetch1(attr) - which verifies on-disk SIZE against what DataJoint recorded at
-insert time (that check runs unconditionally on every fetch, regardless of
-filepath_checksum_size_limit - see datajoint.external.ExternalTable._need_checksum).
-filepath_checksum_size_limit is kept at 0 so the slower content-hash step is skipped - full
-verification of every file would be prohibitively slow, and size mismatch is what actually raises
-in practice. A file that fails this is recorded as corrupt/an issue and simply skipped - no
-round-about fallback path resolution - since file issues have turned out to be rare enough not to
-need special-casing.
-
-Processed and resumable per patient, same as data_coverage.py: if the output file already exists,
-any patient with a row already in it is treated as fully processed and skipped, and new rows are
-appended rather than overwriting. If a previous run died partway through a patient, that patient's
-rows are never partially written (each patient's rows are buffered in memory and only written
-once every one of their stitched tasks has been audited), so resuming is always safe.
+Standalone analysis script: for every NSP_ID=2 stitched task (StitchedChunks row), record whether
+any of its nev/ns3/ns5 files are corrupt (fetched the normal DataJoint way, which verifies on-disk
+size against what was recorded at insert time - filepath_checksum_size_limit is kept at 0 to skip
+the much slower content-hash step), its last-modified time, and its approximate UTC data
+start/end (from the raw start/stop task-comment ticks, anchored to UTC via the originating chunk's
+own NS3/NS5 TimeOrigin - not by re-scanning the stitched file's own packets). File paths
+themselves aren't recorded in the output, only whether each file is corrupt/missing (in `issue`).
+Processed and resumable per patient, same as data_coverage.py: a patient with a row already in the
+output file is skipped, and a patient's rows are only ever written once every one of their
+stitched tasks has been audited without error, so a run that dies partway through a patient never
+leaves partial rows behind to clean up by hand.
 
 Usage:
     python scripts/stitched_file_audit.py [--patient EMU-ID] [--exclude EMU-ID]
@@ -51,14 +24,18 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import datajoint as dj
+dj.config['filepath_checksum_size_limit'] = 0
+
+
 from brpylib import NsxFile
 from datajoint.errors import DataJointError
 from pyNsXStitch.helpers import get_nsx_start_timestamp
 from tqdm import tqdm
 
+NSP_ID = 2
+
 FILE_ATTRS = {'nev_file': 'nev', 'ns3_file': 'ns3', 'ns5_file': 'ns5'}
 ADDED_FIELDS = [
-    'nev_path', 'ns3_path', 'ns5_path',
     'last_modified_utc', 'corrupt',
     'data_start_utc', 'data_end_utc', 'issue',
 ]
@@ -136,7 +113,7 @@ def audit_patient(schema_module, patient_id):
     pk_attrs = heading.primary_key
     chunk_identifiers = schema_module.StitchedChunks.chunk_identifiers
 
-    rows = (table & {'patient_id': patient_id}).fetch(*plain_attrs, as_dict=True)
+    rows = (table & {'patient_id': patient_id, 'nsp_id': NSP_ID}).fetch(*plain_attrs, as_dict=True)
 
     for row in tqdm(rows, desc=f'Auditing patient {patient_id}', miniters=10):
         key_dict = {p: row[p] for p in pk_attrs}
@@ -157,17 +134,14 @@ def audit_patient(schema_module, patient_id):
                 # DataJoint's own checksum check does Path(local_filepath).stat() internally and
                 # raises that directly, before it ever gets a chance to raise a DataJointError.
                 logging.error(f'{filetype} fetch failed for {key_dict}: {e}')
-                out_row[f'{filetype}_path'] = None
                 corrupt = True
                 issues.append(f'{filetype}: {e}')
                 continue
 
             if value is None:
-                out_row[f'{filetype}_path'] = None
                 continue
 
             local_path = Path(value)
-            out_row[f'{filetype}_path'] = str(local_path)
             try:
                 mtimes.append(local_path.stat().st_mtime)
             except OSError as e:
@@ -196,15 +170,8 @@ def audit_patient(schema_module, patient_id):
 
 
 def main(schema_module, out_path, patient_emu_id=None, exclude_emu_ids=None):
-    # Skips the slow content-hash step on every fetch of a stitched (nev/ns3/ns5_file) or raw
-    # task (NS3Chunks/NS5Chunks) file - the unconditional size check that raises on a genuinely
-    # corrupt/replaced file still runs regardless of this setting. Set here, right before any
-    # fetch happens and after connect()/the schema import have both already run, rather than at
-    # module import time, so nothing later in that startup sequence can reset it out from under us.
+    # Suppress datajoint "Skipped checksum" WARNING
     dj.config['filepath_checksum_size_limit'] = 0
-    print(f"filepath_checksum_size_limit={dj.config['filepath_checksum_size_limit']} (file hashing disabled)")
-    # ...which would otherwise make DataJoint log a "Skipped checksum" WARNING on every successful
-    # fetch - expected and not useful here, since skipping it is intentional.
     logging.getLogger('datajoint').setLevel(logging.ERROR)
 
     patients = fetch_patients(schema_module, patient_emu_id, exclude_emu_ids)
@@ -213,7 +180,7 @@ def main(schema_module, out_path, patient_emu_id=None, exclude_emu_ids=None):
     if completed_patients:
         print(f'Resuming: {len(completed_patients)} patient(s) already have rows in {out_path}, skipping them')
 
-    out_exists = os.path.exists(out_path)
+    out_exists = os.path.exists(out_path) and os.path.getsize(out_path) > 0
     total_written = 0
 
     with open(out_path, 'a' if out_exists else 'w', newline='') as f:
