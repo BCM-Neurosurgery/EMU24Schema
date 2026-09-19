@@ -56,13 +56,6 @@ from datajoint.errors import DataJointError
 from pyNsXStitch.helpers import get_nsx_start_timestamp
 from tqdm import tqdm
 
-# Skips the slow content-hash step on every fetch (see module docstring) - the unconditional size
-# check that raises on a genuinely corrupt/replaced file still runs regardless of this setting.
-dj.config['filepath_checksum_size_limit'] = 0
-# ...which makes DataJoint log a "Skipped checksum" WARNING on every successful fetch - expected
-# and not useful here, since skipping it is intentional.
-logging.getLogger('datajoint').setLevel(logging.ERROR)
-
 FILE_ATTRS = {'nev_file': 'nev', 'ns3_file': 'ns3', 'ns5_file': 'ns5'}
 ADDED_FIELDS = [
     'nev_path', 'ns3_path', 'ns5_path',
@@ -207,6 +200,17 @@ def audit_patient(schema_module, patient_id):
 
 
 def main(schema_module, out_path, patient_emu_id=None, exclude_emu_ids=None):
+    # Skips the slow content-hash step on every fetch of a stitched (nev/ns3/ns5_file) or raw
+    # task (NS3Chunks/NS5Chunks) file - the unconditional size check that raises on a genuinely
+    # corrupt/replaced file still runs regardless of this setting. Set here, right before any
+    # fetch happens and after connect()/the schema import have both already run, rather than at
+    # module import time, so nothing later in that startup sequence can reset it out from under us.
+    dj.config['filepath_checksum_size_limit'] = 0
+    print(f"filepath_checksum_size_limit={dj.config['filepath_checksum_size_limit']} (file hashing disabled)")
+    # ...which would otherwise make DataJoint log a "Skipped checksum" WARNING on every successful
+    # fetch - expected and not useful here, since skipping it is intentional.
+    logging.getLogger('datajoint').setLevel(logging.ERROR)
+
     patients = fetch_patients(schema_module, patient_emu_id, exclude_emu_ids)
 
     completed_patients = load_completed_patients(out_path)
