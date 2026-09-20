@@ -10,9 +10,9 @@ or can't otherwise be read is logged as an error and recorded with the failure i
 skipped silently. File paths themselves aren't recorded in the output, same as
 stitched_file_audit.py - only emu_id/filetype/toc_id/chunk_id identify each sampled file.
 
-This is a one-off random snapshot, not an exhaustive per-patient walk, so it isn't resumable like
-data_coverage.py/stitched_file_audit.py - rerunning draws a fresh sample (pass --seed for a
-reproducible one).
+Rerunning against an existing output file draws --n MORE files and appends them, excluding
+whatever (emu_id, filetype, toc_id, chunk_id) combinations are already in it - so repeated runs
+grow the sample without re-auditing (or duplicating) a file already covered.
 
 Usage:
     python scripts/source_file_audit.py --n 100 [--seed 0] [--out source_file_audit.csv]
@@ -21,6 +21,7 @@ Usage:
 import argparse
 import csv
 import logging
+import os
 import random
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,9 +41,10 @@ FIELDS = [
 ]
 
 
-def fetch_candidates(schema_module):
+def fetch_candidates(schema_module, already_sampled):
     """Every NSP_ID=2 NS3/NS5 chunk file, across all patients, as (filetype, file_attr, row)
-    tuples to sample from - row carries emu_id plus the key fields needed to re-query the DB."""
+    tuples to sample from - row carries emu_id plus the key fields needed to re-query the DB.
+    Excludes anything already keyed in already_sampled (see load_sampled_keys)."""
     Patient = schema_module.Patient
     candidates = []
     for table_name, file_attr, filetype in CHUNK_TABLES:
@@ -51,8 +53,22 @@ def fetch_candidates(schema_module):
             'patient_id', 'emu_id', 'admission_id', 'toc_id', 'chunk_id', 'nsp_id', as_dict=True
         )
         for row in rows:
-            candidates.append((table_name, file_attr, filetype, row))
+            key = (str(row['emu_id']), filetype, str(row['toc_id']), str(row['chunk_id']))
+            if key not in already_sampled:
+                candidates.append((table_name, file_attr, filetype, row))
     return candidates
+
+
+def load_sampled_keys(out_path):
+    """(emu_id, filetype, toc_id, chunk_id) for every row already in the output CSV, so a rerun
+    samples only from files not already audited, and never re-adds a duplicate."""
+    if not os.path.exists(out_path):
+        return set()
+    with open(out_path, newline='') as f:
+        return {
+            (row['emu_id'], row['filetype'], row['toc_id'], row['chunk_id'])
+            for row in csv.DictReader(f)
+        }
 
 
 def audit_file(schema_module, table_name, file_attr, key_dict):
@@ -102,15 +118,22 @@ def main(schema_module, n, out_path, seed=None):
     dj.config['filepath_checksum_size_limit'] = 0
     logging.getLogger('datajoint').setLevel(logging.ERROR)
 
-    candidates = fetch_candidates(schema_module)
+    already_sampled = load_sampled_keys(out_path)
+    if already_sampled:
+        print(f'{len(already_sampled)} file(s) already sampled in {out_path}, excluding from candidate pool')
+
+    candidates = fetch_candidates(schema_module, already_sampled)
     print(f'{len(candidates)} NSP_ID={NSP_ID} source chunk file(s) available to sample from')
 
     sample = random.Random(seed).sample(candidates, min(n, len(candidates)))
     print(f'Sampling {len(sample)} file(s)')
 
-    with open(out_path, 'w', newline='') as f:
+    out_exists = os.path.exists(out_path) and os.path.getsize(out_path) > 0
+
+    with open(out_path, 'a' if out_exists else 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=FIELDS)
-        writer.writeheader()
+        if not out_exists:
+            writer.writeheader()
 
         for table_name, file_attr, filetype, row in tqdm(sample, desc='Auditing source files'):
             key_dict = {k: row[k] for k in ('patient_id', 'admission_id', 'toc_id', 'chunk_id', 'nsp_id')}
@@ -128,7 +151,7 @@ def main(schema_module, n, out_path, seed=None):
                 'issue': issue,
             })
 
-    print(f'Wrote {len(sample)} row(s) to {out_path}')
+    print(f'Wrote {len(sample)} row(s) to {out_path} this run')
 
 
 if __name__ == '__main__':
