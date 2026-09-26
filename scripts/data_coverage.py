@@ -1,29 +1,40 @@
 """
-Standalone analysis script: measure recording coverage/gaps for patients in the emu24 schema.
+Standalone analysis script: measure recording coverage/discontinuities for patients in the emu24
+schema.
 
 For each admission, every NS5 data packet (across all TOCInstances/chunks) on NSP_ID is listed
-out and sorted in time; a point where one packet ends before the next one starts is a gap.
+out and sorted in time; a point where one packet ends before the next one starts is a
+discontinuity. "Discontinuity" rather than "gap" is deliberate: not every discontinuity found here
+represents real missing data (some are clock/tick artifacts) - "gap" is reserved for the eventual,
+confirmed list of real missing data once these have been resolved one way or the other.
 
 UTC anchoring: BRK ticks are only comparable within one TOCInstance. Each TOC is anchored ONCE,
 from its own chronologically-first chunk file's TimeOrigin - every other file in that TOC converts
 ticks using that single shared origin (via pyNsXStitch.helpers.brk_toc_ticks_to_utc), never its own
 TimeOrigin, since a file's own TimeOrigin can carry its own small clock latency/inaccuracy.
 
-Insane gaps: a gap that's negative (beyond float rounding) or bigger than MAX_SANE_OFFSET_SECONDS
-means the underlying tick/TimeOrigin was corrupted, not a real gap. These are flagged `insane=True`
-in gap_summary.csv with the raw (nonsensical) value left in `duration_hours` - correcting them is a
-deferred second pass, not done here. A gap of 0-1 ticks at a file cut is a normal artifact, not
-reported at all.
+Insane discontinuities: one that's negative (beyond float rounding) or bigger than
+MAX_SANE_OFFSET_SECONDS means the underlying tick/TimeOrigin was corrupted, not real. These are
+flagged `insane=True` in discontinuity_summary.csv with the raw (nonsensical) value left in
+`duration_hours` - correcting them is a deferred second pass, not done here. A discontinuity of 0-1
+ticks at a file cut is a normal artifact, not reported at all.
 
 Only NS5 on a single NSP is used. Assumes all NS5 files are FileSpec 3.0 (PTP, 64-bit timestamps).
 
 Resumable: if visit_out_path already exists, any patient with a row in it is skipped, and new rows
-are appended. If a previous run died partway through a patient, that patient's partial gap_summary
-rows must be removed by hand before resuming (visit_summary.csv is the completion marker).
+are appended. If a previous run died partway through a patient, that patient's partial
+discontinuity_summary/packet_summary rows must be removed by hand before resuming
+(visit_summary.csv is the completion marker).
+
+Also writes a packet-level CSV (packet_out_path) - one row per raw data packet (patient_id/emu_id,
+admission_id, toc_id, chunk_id, packet_number within its chunk, brk_start, n_points) - as a minimal
+resource for investigating discontinuities directly against the raw packet stream, without needing
+to re-read the source files each time.
 
 Usage:
     python scripts/data_coverage.py [--patient EMU-ID] [--exclude EMU-ID]
-        [--gap-out gap_summary.csv] [--visit-out visit_summary.csv]
+        [--discontinuity-out discontinuity_summary.csv] [--visit-out visit_summary.csv]
+        [--packet-out packet_summary.csv]
 """
 
 import argparse
@@ -92,6 +103,7 @@ class Packet:
     """One data packet read out of an NS5 file, with its source chunk attached."""
     chunk: ChunkFile
     brk_start: int
+    n_points: int
     brk_end: int
     ts_resolution: int
     utc_start: datetime
@@ -99,10 +111,11 @@ class Packet:
 
 
 # A raw BRK tick this far from a TOC's own origin can't be real - the packet header was misread
-# (e.g. byte-misaligned after an earlier corrupted packet). Also the insane-gap threshold below.
+# (e.g. byte-misaligned after an earlier corrupted packet). Also the insane-discontinuity threshold
+# below.
 MAX_SANE_OFFSET_SECONDS = 100 * 365 * 24 * 3600  # 100 years
-ROUNDING_TOLERANCE_SECONDS = 1e-6  # sub-microsecond float noise, not a real negative gap
-FILE_EDGE_TICK_TOLERANCE = 1  # a 0-1 tick gap at a file cut is a normal artifact, not a real gap
+ROUNDING_TOLERANCE_SECONDS = 1e-6  # sub-microsecond float noise, not a real negative discontinuity
+FILE_EDGE_TICK_TOLERANCE = 1  # a 0-1 tick discontinuity at a file cut is a normal artifact
 
 
 def _safe_utc(tick, origin_utc, first_tick, ts_resolution):
@@ -140,6 +153,7 @@ def iter_file_packets(chunk: ChunkFile, origin_utc, ts_resolution, first_tick):
             yield Packet(
                 chunk=chunk,
                 brk_start=brk_start,
+                n_points=n_points,
                 brk_end=brk_end,
                 ts_resolution=ts_resolution,
                 utc_start=_safe_utc(brk_start, origin_utc, first_tick, ts_resolution),
@@ -150,13 +164,22 @@ def iter_file_packets(chunk: ChunkFile, origin_utc, ts_resolution, first_tick):
 
 
 def toc_packets(chunks_for_toc):
-    """Every packet in one TOC, sorted by (chunk_id, brk_start), all anchored to that TOC's own
-    shared origin (see toc_origin)."""
+    """Every packet in one TOC, in true chronological order, all anchored to that TOC's own
+    shared origin (see toc_origin).
+
+    Chunk files are ordered by chunk_id (assumed chronological, same convention used elsewhere).
+    Within one file, packets are kept in iter_file_packets' own order - iter_nsx_timestamps walks
+    the file by byte offset, so that order is already the true physical/chronological read order,
+    regardless of what a packet's own (possibly corrupted) brk_start says. Do NOT re-sort by
+    brk_start: when a corrupted tick drops to a small value, sorting ascending by brk_start yanks
+    that packet - and only that packet - earlier in the sequence than packets that were actually
+    read before it, fabricating the appearance of a tick "resetting then recovering" when the true
+    story (from physical read order) is that the stream just kept glitching with no recovery.
+    """
     origin_utc, ts_resolution, first_tick = toc_origin(chunks_for_toc)
     packets = []
     for chunk in sorted(chunks_for_toc, key=lambda c: c.chunk_id):
         packets.extend(iter_file_packets(chunk, origin_utc, ts_resolution, first_tick))
-    packets.sort(key=lambda p: (p.chunk.chunk_id, p.brk_start))
     return packets
 
 
@@ -173,14 +196,14 @@ def is_insane(duration_seconds: float) -> bool:
     return duration_seconds < -ROUNDING_TOLERANCE_SECONDS or duration_seconds > MAX_SANE_OFFSET_SECONDS
 
 
-def find_gap(before: Packet, after: Packet, cause: str):
+def find_discontinuity(before: Packet, after: Packet, cause: str):
     """
-    Determine whether there's a gap between two time-adjacent packets: BRK ticks (exact) within
-    one TOC, UTC otherwise (ticks aren't comparable across a TOC boundary). A negative-beyond-
-    rounding or implausibly large duration is flagged `insane` and reported as-is, uncorrected -
-    see module docstring.
+    Determine whether there's a discontinuity between two time-adjacent packets: BRK ticks (exact)
+    within one TOC, UTC otherwise (ticks aren't comparable across a TOC boundary). A negative-
+    beyond-rounding or implausibly large duration is flagged `insane` and reported as-is,
+    uncorrected - see module docstring.
 
-    :return: None if no gap, else a dict of the fields to attach to a Gap
+    :return: None if no discontinuity, else a dict of the fields to attach to a Discontinuity
     """
     same_toc = before.chunk.toc_id == after.chunk.toc_id
     if same_toc:
@@ -201,7 +224,7 @@ def find_gap(before: Packet, after: Packet, cause: str):
 
 
 @dataclass
-class Gap:
+class Discontinuity:
     patient_id: int
     emu_id: str
     admission_id: int
@@ -215,11 +238,12 @@ class Gap:
 
 def process_admission(patient_id, emu_id, admission_id, chunks):
     """
-    Build the sorted NS5/NSP_ID packet timeline for one admission, TOC by TOC (each on its own
-    shared UTC origin - see module docstring), find gaps in it, and compute summary stats.
+    Build the packet timeline for one admission, TOC by TOC (each on its own shared UTC origin -
+    see module docstring), find discontinuities in it, and compute summary stats.
 
     :param chunks: every NS5 ChunkFile belonging to this admission (all toc_id, NSP_ID only)
-    :return: (gaps, visit_row), or (None, None) if there were no packets at all
+    :return: (discontinuities, packet_rows, visit_row), or (None, None, None) if there were no
+        packets at all
     """
     toc_order, toc_order_mismatch, base_file_by_toc = determine_toc_order(chunks)
     if toc_order_mismatch:
@@ -238,19 +262,43 @@ def process_admission(patient_id, emu_id, admission_id, chunks):
         all_packets.extend(toc_packets(chunks_by_toc[toc_id]))
 
     if not all_packets:
-        return None, None
+        return None, None, None
 
-    gaps = []
+    discontinuities = []
     for before, after in zip(all_packets, all_packets[1:]):
         cause = classify_cause(before, after)
-        gap_info = find_gap(before, after, cause)
-        if gap_info is not None:
-            gaps.append(Gap(patient_id, emu_id, admission_id, before, after, cause, **gap_info))
+        disc_info = find_discontinuity(before, after, cause)
+        if disc_info is not None:
+            discontinuities.append(
+                Discontinuity(patient_id, emu_id, admission_id, before, after, cause, **disc_info)
+            )
+
+    # packet_number resets to 0 at the start of each chunk file, so it's a stable, minimal
+    # per-chunk index for cross-referencing a row here against the same packet in the raw file.
+    packet_rows = []
+    packet_number = 0
+    current_chunk_key = None
+    for p in all_packets:
+        chunk_key = (p.chunk.toc_id, p.chunk.chunk_id)
+        if chunk_key != current_chunk_key:
+            current_chunk_key = chunk_key
+            packet_number = 0
+        packet_rows.append({
+            'patient_id': patient_id,
+            'emu_id': emu_id,
+            'admission_id': admission_id,
+            'toc_id': p.chunk.toc_id,
+            'chunk_id': p.chunk.chunk_id,
+            'packet_number': packet_number,
+            'brk_start': p.brk_start,
+            'n_points': p.n_points,
+        })
+        packet_number += 1
 
     span_start = all_packets[0].utc_start
     span_end = all_packets[-1].utc_end
     total_span_hours = (span_end - span_start).total_seconds() / 3600
-    total_gap_hours = sum(g.duration_hours for g in gaps)
+    total_discontinuity_hours = sum(d.duration_hours for d in discontinuities)
     visit_row = {
         'patient_id': patient_id,
         'emu_id': emu_id,
@@ -259,20 +307,20 @@ def process_admission(patient_id, emu_id, admission_id, chunks):
         'recording_start_utc': span_start.isoformat(),
         'recording_end_utc': span_end.isoformat(),
         'total_span_hours': total_span_hours,
-        'n_gaps': len(gaps),
-        'total_gap_hours': total_gap_hours,
-        'total_continuous_hours': total_span_hours - total_gap_hours,
-        'pct_coverage': 100 * (total_span_hours - total_gap_hours) / total_span_hours if total_span_hours else None,
-        'n_insane_gaps': sum(1 for g in gaps if g.insane),
+        'n_discontinuities': len(discontinuities),
+        'total_discontinuity_hours': total_discontinuity_hours,
+        'total_continuous_hours': total_span_hours - total_discontinuity_hours,
+        'pct_coverage': 100 * (total_span_hours - total_discontinuity_hours) / total_span_hours if total_span_hours else None,
+        'n_insane_discontinuities': sum(1 for d in discontinuities if d.insane),
         'toc_order_mismatch': toc_order_mismatch,
     }
 
-    return gaps, visit_row
+    return discontinuities, packet_rows, visit_row
 
 
-GAP_FIELDS = [
+DISCONTINUITY_FIELDS = [
     'patient_id', 'emu_id', 'admission_id', 'nsp_id',
-    'gap_start_utc', 'gap_end_utc', 'duration_hours', 'detection_method', 'insane',
+    'discontinuity_start_utc', 'discontinuity_end_utc', 'duration_hours', 'detection_method', 'insane',
     'toc_id_before', 'toc_base_file_before', 'chunk_id_before', 'file_before',
     'brk_before_ts', 'brk_before_resolution_hz',
     'toc_id_after', 'toc_base_file_after', 'chunk_id_after', 'file_after',
@@ -283,36 +331,41 @@ GAP_FIELDS = [
 VISIT_FIELDS = [
     'patient_id', 'emu_id', 'admission_id', 'nsp_id',
     'recording_start_utc', 'recording_end_utc', 'total_span_hours',
-    'n_gaps', 'total_gap_hours', 'total_continuous_hours', 'pct_coverage',
-    'n_insane_gaps',
+    'n_discontinuities', 'total_discontinuity_hours', 'total_continuous_hours', 'pct_coverage',
+    'n_insane_discontinuities',
     'toc_order_mismatch',
 ]
 
+PACKET_FIELDS = [
+    'patient_id', 'emu_id', 'admission_id', 'toc_id', 'chunk_id', 'packet_number',
+    'brk_start', 'n_points',
+]
 
-def gap_to_row(gap: Gap) -> dict:
+
+def discontinuity_to_row(discontinuity: Discontinuity) -> dict:
     return {
-        'patient_id': gap.patient_id,
-        'emu_id': gap.emu_id,
-        'admission_id': gap.admission_id,
+        'patient_id': discontinuity.patient_id,
+        'emu_id': discontinuity.emu_id,
+        'admission_id': discontinuity.admission_id,
         'nsp_id': NSP_ID,
-        'gap_start_utc': gap.before.utc_end.isoformat(),
-        'gap_end_utc': gap.after.utc_start.isoformat(),
-        'duration_hours': gap.duration_hours,
-        'detection_method': gap.detection_method,
-        'insane': gap.insane,
-        'toc_id_before': gap.before.chunk.toc_id,
-        'toc_base_file_before': gap.before.chunk.toc_base_file,
-        'chunk_id_before': gap.before.chunk.chunk_id,
-        'file_before': gap.before.chunk.filepath,
-        'brk_before_ts': gap.before.brk_end,
-        'brk_before_resolution_hz': gap.before.ts_resolution,
-        'toc_id_after': gap.after.chunk.toc_id,
-        'toc_base_file_after': gap.after.chunk.toc_base_file,
-        'chunk_id_after': gap.after.chunk.chunk_id,
-        'file_after': gap.after.chunk.filepath,
-        'brk_after_ts': gap.after.brk_start,
-        'brk_after_resolution_hz': gap.after.ts_resolution,
-        'cause': gap.cause,
+        'discontinuity_start_utc': discontinuity.before.utc_end.isoformat(),
+        'discontinuity_end_utc': discontinuity.after.utc_start.isoformat(),
+        'duration_hours': discontinuity.duration_hours,
+        'detection_method': discontinuity.detection_method,
+        'insane': discontinuity.insane,
+        'toc_id_before': discontinuity.before.chunk.toc_id,
+        'toc_base_file_before': discontinuity.before.chunk.toc_base_file,
+        'chunk_id_before': discontinuity.before.chunk.chunk_id,
+        'file_before': discontinuity.before.chunk.filepath,
+        'brk_before_ts': discontinuity.before.brk_end,
+        'brk_before_resolution_hz': discontinuity.before.ts_resolution,
+        'toc_id_after': discontinuity.after.chunk.toc_id,
+        'toc_base_file_after': discontinuity.after.chunk.toc_base_file,
+        'chunk_id_after': discontinuity.after.chunk.chunk_id,
+        'file_after': discontinuity.after.chunk.filepath,
+        'brk_after_ts': discontinuity.after.brk_start,
+        'brk_after_resolution_hz': discontinuity.after.ts_resolution,
+        'cause': discontinuity.cause,
     }
 
 
@@ -356,7 +409,7 @@ def load_completed_patients(visit_out_path):
         return {int(row['patient_id']) for row in csv.DictReader(f)}
 
 
-def main(patient_emu_id, gap_out_path, visit_out_path, exclude_emu_ids=None):
+def main(patient_emu_id, discontinuity_out_path, visit_out_path, packet_out_path, exclude_emu_ids=None):
     admissions = fetch_admissions(patient_emu_id, exclude_emu_ids)
     total_insane = 0
     toc_order_mismatch_patients = set()
@@ -376,35 +429,41 @@ def main(patient_emu_id, gap_out_path, visit_out_path, exclude_emu_ids=None):
             print(f'  No NS5 chunks found for NSP_ID={NSP_ID}, skipping')
             continue
 
-        gaps, visit_row = process_admission(
+        discontinuities, packet_rows, visit_row = process_admission(
             admission['patient_id'], admission['emu_id'], admission['admission_id'], chunks
         )
         if visit_row is None:
             print('  No data packets found in any NS5 chunk, skipping')
             continue
-        print(f"  {visit_row['n_gaps']} gap(s) found ({visit_row['n_insane_gaps']} insane)")
-        total_insane += visit_row['n_insane_gaps']
+        print(f"  {visit_row['n_discontinuities']} discontinuity(-ies) found ({visit_row['n_insane_discontinuities']} insane)")
+        total_insane += visit_row['n_insane_discontinuities']
         if visit_row['toc_order_mismatch']:
             toc_order_mismatch_patients.add(admission['emu_id'])
 
-        # Reopened per admission (rather than held open for the whole run) so gap_out_path/
-        # visit_out_path are flushed and readable on disk after every admission, not just at exit.
-        gap_exists = os.path.exists(gap_out_path)
+        # Reopened per admission (rather than held open for the whole run) so every output file is
+        # flushed and readable on disk after every admission, not just at exit.
+        discontinuity_exists = os.path.exists(discontinuity_out_path)
         visit_exists = os.path.exists(visit_out_path)
-        with open(gap_out_path, 'a' if gap_exists else 'w', newline='') as gap_f, \
-                open(visit_out_path, 'a' if visit_exists else 'w', newline='') as visit_f:
-            gap_writer = csv.DictWriter(gap_f, fieldnames=GAP_FIELDS)
-            if not gap_exists:
-                gap_writer.writeheader()
+        packet_exists = os.path.exists(packet_out_path)
+        with open(discontinuity_out_path, 'a' if discontinuity_exists else 'w', newline='') as disc_f, \
+                open(visit_out_path, 'a' if visit_exists else 'w', newline='') as visit_f, \
+                open(packet_out_path, 'a' if packet_exists else 'w', newline='') as packet_f:
+            disc_writer = csv.DictWriter(disc_f, fieldnames=DISCONTINUITY_FIELDS)
+            if not discontinuity_exists:
+                disc_writer.writeheader()
             visit_writer = csv.DictWriter(visit_f, fieldnames=VISIT_FIELDS)
             if not visit_exists:
                 visit_writer.writeheader()
+            packet_writer = csv.DictWriter(packet_f, fieldnames=PACKET_FIELDS)
+            if not packet_exists:
+                packet_writer.writeheader()
 
-            for gap in gaps:
-                gap_writer.writerow(gap_to_row(gap))
+            for discontinuity in discontinuities:
+                disc_writer.writerow(discontinuity_to_row(discontinuity))
+            packet_writer.writerows(packet_rows)
             visit_writer.writerow(visit_row)
 
-    print(f'\nTotal insane gaps across all processed admissions: {total_insane}')
+    print(f'\nTotal insane discontinuities across all processed admissions: {total_insane}')
     if toc_order_mismatch_patients:
         print(
             f'TOC label order disagreed with toc_id order for {len(toc_order_mismatch_patients)} '
@@ -417,7 +476,7 @@ if __name__ == '__main__':
 
     arg_parser = argparse.ArgumentParser(
         parents=[make_login_parser()],
-        description=f'Measure NS5/NSP_ID={NSP_ID} recording coverage and gaps for one or all patients.',
+        description=f'Measure NS5/NSP_ID={NSP_ID} recording coverage and discontinuities for one or all patients.',
         add_help=False,
     )
     arg_parser.add_argument('--patient', type=str, help='Restrict to the patient with this EMU identifier')
@@ -425,10 +484,11 @@ if __name__ == '__main__':
         '--exclude', type=str, action='append', default=[], metavar='EMU-ID',
         help='Exclude the patient with this EMU identifier from the analysis (repeatable)'
     )
-    arg_parser.add_argument('--gap-out', type=str, default='gap_summary.csv')
+    arg_parser.add_argument('--discontinuity-out', type=str, default='discontinuity_summary.csv')
     arg_parser.add_argument('--visit-out', type=str, default='visit_summary.csv')
+    arg_parser.add_argument('--packet-out', type=str, default='packet_summary.csv')
     args = arg_parser.parse_args()
 
     connect(args)
 
-    main(args.patient, args.gap_out, args.visit_out, args.exclude)
+    main(args.patient, args.discontinuity_out, args.visit_out, args.packet_out, args.exclude)
