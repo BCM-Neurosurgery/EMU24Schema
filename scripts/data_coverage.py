@@ -21,20 +21,21 @@ ticks at a file cut is a normal artifact, not reported at all.
 
 Only NS5 on a single NSP is used. Assumes all NS5 files are FileSpec 3.0 (PTP, 64-bit timestamps).
 
-Resumable: if visit_out_path already exists, any patient with a row in it is skipped, and new rows
-are appended. If a previous run died partway through a patient, that patient's partial
-discontinuity_summary/packet_summary rows must be removed by hand before resuming
+Resumable: if visit_summary.csv already exists in --output, any patient with a row in it is
+skipped, and new rows are appended. If a previous run died partway through a patient, that
+patient's partial discontinuity_summary/packet_summary rows must be removed by hand before resuming
 (visit_summary.csv is the completion marker).
 
-Also writes a packet-level CSV (packet_out_path) - one row per raw data packet (patient_id/emu_id,
-admission_id, toc_id, chunk_id, packet_number within its chunk, brk_start, n_points) - as a minimal
-resource for investigating discontinuities directly against the raw packet stream, without needing
-to re-read the source files each time.
+Also writes a packet-level CSV (packet_summary.csv) - one row per raw data packet (patient_id/
+emu_id, admission_id, toc_id, chunk_id, packet_number within its chunk, brk_start, n_points) - as a
+minimal resource for investigating discontinuities directly against the raw packet stream, without
+needing to re-read the source files each time.
+
+All three output files (discontinuity_summary.csv, visit_summary.csv, packet_summary.csv) are
+written to --output, created if it doesn't exist.
 
 Usage:
-    python scripts/data_coverage.py [--patient EMU-ID] [--exclude EMU-ID]
-        [--discontinuity-out discontinuity_summary.csv] [--visit-out visit_summary.csv]
-        [--packet-out packet_summary.csv]
+    python scripts/data_coverage.py [--patient EMU-ID] [--exclude EMU-ID] [--output DIR]
 """
 
 import argparse
@@ -409,7 +410,17 @@ def load_completed_patients(visit_out_path):
         return {int(row['patient_id']) for row in csv.DictReader(f)}
 
 
-def main(patient_emu_id, discontinuity_out_path, visit_out_path, packet_out_path, exclude_emu_ids=None):
+DISCONTINUITY_SUMMARY_FILENAME = 'discontinuity_summary.csv'
+VISIT_SUMMARY_FILENAME = 'visit_summary.csv'
+PACKET_SUMMARY_FILENAME = 'packet_summary.csv'
+
+
+def main(patient_emu_id, output_dir, exclude_emu_ids=None):
+    os.makedirs(output_dir, exist_ok=True)
+    discontinuity_out_path = os.path.join(output_dir, DISCONTINUITY_SUMMARY_FILENAME)
+    visit_out_path = os.path.join(output_dir, VISIT_SUMMARY_FILENAME)
+    packet_out_path = os.path.join(output_dir, PACKET_SUMMARY_FILENAME)
+
     admissions = fetch_admissions(patient_emu_id, exclude_emu_ids)
     total_insane = 0
     toc_order_mismatch_patients = set()
@@ -484,11 +495,12 @@ if __name__ == '__main__':
         '--exclude', type=str, action='append', default=[], metavar='EMU-ID',
         help='Exclude the patient with this EMU identifier from the analysis (repeatable)'
     )
-    arg_parser.add_argument('--discontinuity-out', type=str, default='discontinuity_summary.csv')
-    arg_parser.add_argument('--visit-out', type=str, default='visit_summary.csv')
-    arg_parser.add_argument('--packet-out', type=str, default='packet_summary.csv')
+    arg_parser.add_argument(
+        '--output', type=str, default='.',
+        help=f'Output directory for {DISCONTINUITY_SUMMARY_FILENAME}, {VISIT_SUMMARY_FILENAME}, and {PACKET_SUMMARY_FILENAME} (created if missing)'
+    )
     args = arg_parser.parse_args()
 
     connect(args)
 
-    main(args.patient, args.discontinuity_out, args.visit_out, args.packet_out, args.exclude)
+    main(args.patient, args.output, args.exclude)
