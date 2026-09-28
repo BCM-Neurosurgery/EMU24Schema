@@ -103,6 +103,7 @@ def determine_toc_order(chunks):
 class Packet:
     """One data packet read out of an NS5 file, with its source chunk attached."""
     chunk: ChunkFile
+    packet_number: int  # resets to 0 at the start of each chunk file
     brk_start: int
     n_points: int
     brk_end: int
@@ -117,6 +118,11 @@ class Packet:
 MAX_SANE_OFFSET_SECONDS = 100 * 365 * 24 * 3600  # 100 years
 ROUNDING_TOLERANCE_SECONDS = 1e-6  # sub-microsecond float noise, not a real negative discontinuity
 FILE_EDGE_TICK_TOLERANCE = 1  # a 0-1 tick discontinuity at a file cut is a normal artifact
+
+# TimeStampResolution is always this value in this pipeline (PTP NS5, 30kHz) - not stored per-row in
+# discontinuity_summary.csv since it never varies; downstream code (discontinuity_corrections.py)
+# uses this constant directly instead.
+BRK_RESOLUTION_HZ = 30000
 
 
 def _safe_utc(tick, origin_utc, first_tick, ts_resolution):
@@ -149,10 +155,11 @@ def iter_file_packets(chunk: ChunkFile, origin_utc, ts_resolution, first_tick):
     try:
         sample_freq = nsx_file.basic_header['SampleResolution'] / nsx_file.basic_header['Period']
         ticks_per_sample = ts_resolution / sample_freq
-        for brk_start, n_points in iter_nsx_timestamps(nsx_file):
+        for packet_number, (brk_start, n_points) in enumerate(iter_nsx_timestamps(nsx_file)):
             brk_end = brk_start + int(round(n_points * ticks_per_sample))
             yield Packet(
                 chunk=chunk,
+                packet_number=packet_number,
                 brk_start=brk_start,
                 n_points=n_points,
                 brk_end=brk_end,
@@ -274,27 +281,19 @@ def process_admission(patient_id, emu_id, admission_id, chunks):
                 Discontinuity(patient_id, emu_id, admission_id, before, after, cause, **disc_info)
             )
 
-    # packet_number resets to 0 at the start of each chunk file, so it's a stable, minimal
-    # per-chunk index for cross-referencing a row here against the same packet in the raw file.
-    packet_rows = []
-    packet_number = 0
-    current_chunk_key = None
-    for p in all_packets:
-        chunk_key = (p.chunk.toc_id, p.chunk.chunk_id)
-        if chunk_key != current_chunk_key:
-            current_chunk_key = chunk_key
-            packet_number = 0
-        packet_rows.append({
+    packet_rows = [
+        {
             'patient_id': patient_id,
             'emu_id': emu_id,
             'admission_id': admission_id,
             'toc_id': p.chunk.toc_id,
             'chunk_id': p.chunk.chunk_id,
-            'packet_number': packet_number,
+            'packet_number': p.packet_number,
             'brk_start': p.brk_start,
             'n_points': p.n_points,
-        })
-        packet_number += 1
+        }
+        for p in all_packets
+    ]
 
     span_start = all_packets[0].utc_start
     span_end = all_packets[-1].utc_end
@@ -321,11 +320,9 @@ def process_admission(patient_id, emu_id, admission_id, chunks):
 
 DISCONTINUITY_FIELDS = [
     'patient_id', 'emu_id', 'admission_id', 'nsp_id',
-    'discontinuity_start_utc', 'discontinuity_end_utc', 'duration_hours', 'detection_method', 'insane',
-    'toc_id_before', 'toc_base_file_before', 'chunk_id_before', 'file_before',
-    'brk_before_ts', 'brk_before_resolution_hz',
-    'toc_id_after', 'toc_base_file_after', 'chunk_id_after', 'file_after',
-    'brk_after_ts', 'brk_after_resolution_hz',
+    'start_utc', 'end_utc', 'duration_hours', 'detection_method', 'insane',
+    'toc_id_before', 'toc_base_before', 'chunk_before', 'packet_before', 'file_before', 'brk_ts_before',
+    'toc_id_after', 'toc_base_after', 'chunk_after', 'packet_after', 'file_after', 'brk_ts_after',
     'cause',
 ]
 
@@ -349,23 +346,23 @@ def discontinuity_to_row(discontinuity: Discontinuity) -> dict:
         'emu_id': discontinuity.emu_id,
         'admission_id': discontinuity.admission_id,
         'nsp_id': NSP_ID,
-        'discontinuity_start_utc': discontinuity.before.utc_end.isoformat(),
-        'discontinuity_end_utc': discontinuity.after.utc_start.isoformat(),
+        'start_utc': discontinuity.before.utc_end.isoformat(),
+        'end_utc': discontinuity.after.utc_start.isoformat(),
         'duration_hours': discontinuity.duration_hours,
         'detection_method': discontinuity.detection_method,
         'insane': discontinuity.insane,
         'toc_id_before': discontinuity.before.chunk.toc_id,
-        'toc_base_file_before': discontinuity.before.chunk.toc_base_file,
-        'chunk_id_before': discontinuity.before.chunk.chunk_id,
+        'toc_base_before': discontinuity.before.chunk.toc_base_file,
+        'chunk_before': discontinuity.before.chunk.chunk_id,
+        'packet_before': discontinuity.before.packet_number,
         'file_before': discontinuity.before.chunk.filepath,
-        'brk_before_ts': discontinuity.before.brk_end,
-        'brk_before_resolution_hz': discontinuity.before.ts_resolution,
+        'brk_ts_before': discontinuity.before.brk_end,
         'toc_id_after': discontinuity.after.chunk.toc_id,
-        'toc_base_file_after': discontinuity.after.chunk.toc_base_file,
-        'chunk_id_after': discontinuity.after.chunk.chunk_id,
+        'toc_base_after': discontinuity.after.chunk.toc_base_file,
+        'chunk_after': discontinuity.after.chunk.chunk_id,
+        'packet_after': discontinuity.after.packet_number,
         'file_after': discontinuity.after.chunk.filepath,
-        'brk_after_ts': discontinuity.after.brk_start,
-        'brk_after_resolution_hz': discontinuity.after.ts_resolution,
+        'brk_ts_after': discontinuity.after.brk_start,
         'cause': discontinuity.cause,
     }
 
