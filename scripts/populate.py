@@ -1,15 +1,11 @@
 import argparse
-from pathlib import Path
 
 import datajoint
 
 try:
     import tomllib
 except ModuleNotFoundError:
-    try:
-        import tomli as tomllib
-    except ModuleNotFoundError:
-        tomllib = None
+    import tomli as tomllib
 
 from emu24.helper import *
 
@@ -53,30 +49,6 @@ def populate_patient(patient_name):
 
     print('Stitching new data...')
     StitchedChunks().populate(restriction, display_progress=True, suppress_errors=True)
-
-
-def load_patient_id(patients_file):
-    if tomllib is None:
-        raise RuntimeError(
-            'Reading the patients TOML file requires Python 3.11+ or the tomli package'
-        )
-
-    patients_path = Path(patients_file).expanduser()
-    with patients_path.open('rb') as file:
-        patients = tomllib.load(file)
-
-    patient_ids = list(patients)
-    if len(patient_ids) != 1:
-        raise ValueError(
-            f'Expected exactly one patient section in {patients_path}; '
-            f'found {len(patient_ids)}'
-        )
-
-    patient_id = patient_ids[0]
-    if not isinstance(patients[patient_id], dict):
-        raise ValueError(f'Expected a TOML table for patient {patient_id!r}')
-
-    return patient_id
 
 
 def list_available_patients():
@@ -129,7 +101,7 @@ if __name__ == '__main__':
         '--patients-file',
         type=str,
         default='/home/settings/EMU-18112/active-patients.toml',
-        help='TOML file containing the single active patient (defaults to %(default)s)'
+        help='TOML file containing active patients (defaults to %(default)s)'
     )
 
     arg_parser.add_argument(
@@ -155,4 +127,8 @@ if __name__ == '__main__':
     elif args.patient:
         populate_patient(args.patient)
     else:
-        populate_patient(load_patient_id(args.patients_file))
+        with open(args.patients_file, 'rb') as patients_file:
+            active_patients = tomllib.load(patients_file)
+
+        for patient_id in active_patients:
+            populate_patient(patient_id)
