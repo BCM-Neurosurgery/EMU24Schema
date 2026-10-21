@@ -47,6 +47,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 import datajoint as dj
+import pandas as pd
 from brpylib import NsxFile
 from pyNsXStitch.helpers import brk_toc_ticks_to_utc, get_nsx_start_timestamp
 from pyNsXStitch.streamers import iter_nsx_timestamps
@@ -374,10 +375,18 @@ def fetch_admissions(patient_emu_id=None, exclude_emu_ids=None):
         query = query & f'emu_id="{patient_emu_id}"'
     for excluded in exclude_emu_ids or []:
         query = query & f'emu_id!="{excluded}"'
-    rows = query.fetch('patient_id', 'emu_id', 'admission_id', as_dict=True)
+    rows = query.fetch('patient_id', 'emu_id', 'admission_id', 'admission_date', as_dict=True)
     # DataJoint returns numpy scalar types (e.g. numpy.int64) for int attributes - normalize at
     # the fetch boundary, since those repr() ugly (np.int64(43)) once logged inside a tuple/list.
-    return [{**row, 'patient_id': int(row['patient_id']), 'admission_id': int(row['admission_id'])} for row in rows]
+    clean_rows = []
+    for row in rows:
+        clean_rows.append({
+            'emu_id': row['emu_id'],
+            'patient_id': int(row['patient_id']),
+            'admission_id': int(row['admission_id']),
+            'admission_date': pd.to_datetime(row['admission_date'], errors="coerce"),
+        })
+    return clean_rows
 
 
 def fetch_chunks_for_admission(patient_id, admission_id):
@@ -412,7 +421,7 @@ VISIT_SUMMARY_FILENAME = 'visit_summary.csv'
 PACKET_SUMMARY_FILENAME = 'packet_summary.csv'
 
 
-def main(patient_emu_id, output_dir, exclude_emu_ids=None):
+def main(patient_emu_id, output_dir, exclude_emu_ids=None, after=None, before=None):
     os.makedirs(output_dir, exist_ok=True)
     discontinuity_out_path = os.path.join(output_dir, DISCONTINUITY_SUMMARY_FILENAME)
     visit_out_path = os.path.join(output_dir, VISIT_SUMMARY_FILENAME)
@@ -430,6 +439,19 @@ def main(patient_emu_id, output_dir, exclude_emu_ids=None):
         if admission['patient_id'] in completed_patients:
             print(f"Skipping patient {admission['emu_id']} admission {admission['admission_id']} (already complete)")
             continue
+
+        if before or after:
+            if pd.isna(admission['admission_date']):
+                print(f"Skipping {admission['emu_id']} admission {admission['admission_id']} (no valid admission date)")
+                continue
+
+            elif after and admission['admission_date'] < pd.Timestamp(after):
+                print(f"Skipping {admission['emu_id']} admission {admission['admission_id']} (too early)")
+                continue
+
+            elif before and admission['admission_date'] >= pd.Timestamp(before):
+                print(f"Skipping {admission['emu_id']} admission {admission['admission_id']} (too late)")
+                continue
 
         print(f"Processing patient {admission['emu_id']} admission {admission['admission_id']}...")
         chunks = fetch_chunks_for_admission(admission['patient_id'], admission['admission_id'])
@@ -493,6 +515,14 @@ if __name__ == '__main__':
         help='Exclude the patient with this EMU identifier from the analysis (repeatable)'
     )
     arg_parser.add_argument(
+        '--after', type=str,  default=None,
+        help="Only include patients whose admission started after the given date (must be pd.Timestamp parse-able)"
+    )
+    arg_parser.add_argument(
+        '--before', type=str,  default=None,
+        help="Only include patients whose admission started before the given date (must be pd.Timestamp parse-able)"
+    )
+    arg_parser.add_argument(
         '--output', type=str, default='.',
         help=f'Output directory for {DISCONTINUITY_SUMMARY_FILENAME}, {VISIT_SUMMARY_FILENAME}, and {PACKET_SUMMARY_FILENAME} (created if missing)'
     )
@@ -500,4 +530,4 @@ if __name__ == '__main__':
 
     connect(args)
 
-    main(args.patient, args.output, args.exclude)
+    main(args.patient, args.output, args.exclude, args.after, args.before)
