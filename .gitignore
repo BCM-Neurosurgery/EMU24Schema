@@ -1,5 +1,5 @@
 # ignore IDE metadata
-.idea/:
+.idea/
 .vscode
 .vscode/*
 
@@ -12,12 +12,17 @@ scripts/.env*
 *.egg-info
 *.pyc
 __pycache__/
+build/
+*.ipynb_checkpoints*
 
 # Exclude all data, logging, and analysis results direcotries
 *data/
 /phi-data/
 /scripts/diagnostics/safe-data/
 *log*
+
+# Exclude local agent md files
+CLAUDE.md
 
 # Ignore test/example artifacts
 test*.py
