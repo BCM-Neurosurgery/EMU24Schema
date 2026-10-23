@@ -1,4 +1,11 @@
+import argparse
+
 import datajoint
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
 
 from emu24.helper import *
 
@@ -42,6 +49,7 @@ def populate_patient(patient_name):
 
     print('Stitching new data...')
     StitchedChunks().populate(restriction, display_progress=True, suppress_errors=True)
+
 
 def list_available_patients():
     patients = Patient().fetch('patient_id', 'emu_id', 'dob')
@@ -90,6 +98,12 @@ if __name__ == '__main__':
     )
 
     arg_parser.add_argument(
+        '--patients-file',
+        type=str,
+        help='TOML file containing active patients, only run populate on these patients'
+    )
+
+    arg_parser.add_argument(
         '--list-patients',
         action='store_true',
         help='List available patients and their EMU identifiers'
@@ -111,5 +125,11 @@ if __name__ == '__main__':
         list_available_patients()
     elif args.patient:
         populate_patient(args.patient)
+    elif args.patients_file:
+        with open(args.patients_file, 'rb') as patients_file:
+            active_patients = tomllib.load(patients_file)
+
+        for patient_id in active_patients.keys():
+            populate_patient(patient_id)
     else:
         populate_all()
