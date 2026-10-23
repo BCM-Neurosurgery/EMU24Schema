@@ -1,20 +1,31 @@
-*.egg-info
-*.pyc
+# ignore IDE metadata
 .idea/:
-*log*
-db/
-db/*
-docker-compose*.yml
-mysql_data/
 .vscode
 .vscode/*
+
+# Ignore all env files
 .env
 *.env
-test*.py
 scripts/.env*
+
+# Ignore python artifacts
+*.egg-info
+*.pyc
+__pycache__/
+
+# Exclude all data, logging, and analysis results direcotries
+*data/
+/phi-data/
+/scripts/diagnostics/safe-data/
+*log*
+
+# Ignore test/example artifacts
+test*.py
 test*.ipynb
 task_ids.txt
 create_tables_mysql.sql
 add_existing_patient_example_chunks*.py
-log.txt
 *.sh
+mysql_data/
+db/
+db/*
