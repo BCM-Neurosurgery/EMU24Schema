@@ -38,7 +38,7 @@ import datajoint as dj
 from datajoint.errors import DataJointError
 from tqdm import tqdm
 
-from scripts.diagnostics.data_coverage import ChunkFile, iter_file_packets
+from scripts.diagnostics.gaps.data_coverage import ChunkFile, iter_file_packets
 
 NSP_ID = 2
 CHUNK_TABLES = [('NS3Chunks', 'ns3_file', 'ns3'), ('NS5Chunks', 'ns5_file', 'ns5')]

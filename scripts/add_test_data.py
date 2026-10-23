@@ -1,5 +1,14 @@
-from emu24.helper import *
+import os
 
+# This early connect call is required for connectivity  in the dev environment
+from emu24.helper import *
+from emu24.settings import environment
+if environment == 'development':
+    connect(username=os.environ.get('DJ_USER'), password=os.environ.get('DJ_PASSWORD'))
+else:
+    raise ValueError('Random data should only be used for development!')
+
+from emu24.schema import Patient, Admission, StopComments, StartComments, StitchedChunks
 
 PATIENT_NAME = 'EXP'
 PATIENT_DOB = '1985-02-04'
