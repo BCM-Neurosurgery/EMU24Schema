@@ -100,8 +100,7 @@ if __name__ == '__main__':
     arg_parser.add_argument(
         '--patients-file',
         type=str,
-        default='/home/settings/EMU-18112/active-patients.toml',
-        help='TOML file containing active patients (defaults to %(default)s)'
+        help='TOML file containing active patients, only run populate on these patients'
     )
 
     arg_parser.add_argument(
@@ -126,9 +125,11 @@ if __name__ == '__main__':
         list_available_patients()
     elif args.patient:
         populate_patient(args.patient)
-    else:
+    elif args.patients_file:
         with open(args.patients_file, 'rb') as patients_file:
             active_patients = tomllib.load(patients_file)
 
         for patient_id in active_patients.keys():
             populate_patient(patient_id)
+    else:
+        populate_all()
