@@ -130,5 +130,5 @@ if __name__ == '__main__':
         with open(args.patients_file, 'rb') as patients_file:
             active_patients = tomllib.load(patients_file)
 
-        for patient_id in active_patients:
+        for patient_id in active_patients.keys():
             populate_patient(patient_id)
