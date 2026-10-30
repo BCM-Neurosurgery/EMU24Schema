@@ -92,7 +92,7 @@ def scrape_electrode_info(patients):
         pt_probes = (Probes() & f"patient_id = '{pt_id}'").fetch('probe_id')
         if pt_probes.size > 0:
             continue
-        csv_glob = f"{PROJECTWORLDS_PATH}/{patient}_Datafile/IMG/{patient}*electrodes_v2025+.csv"
+        csv_glob = f"{PROJECTWORLDS_PATH}/{patient}_?Datafile/IMG/Reconstructions/{patient}*electrodes_v2025+.csv"
         path_match = glob(csv_glob)
         if len(path_match) == 0:
             print("skipping patient", patient, "- no electrode file found")
