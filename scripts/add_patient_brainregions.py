@@ -18,7 +18,7 @@ def get_patients():
     return patient_list
 
 def get_scan_files(patient):
-    search_path = f"{PROJECTWORLDS_PATH}/{patient}_Datafile/IMG"
+    search_path = f"{PROJECTWORLDS_PATH}/{patient}Datafile/IMG"
  
     mri_glob = glob(f"{search_path}/*MRI*.nii")
     if len(mri_glob) == 0:
@@ -90,20 +90,28 @@ def scrape_electrode_info(patients):
 
         # check if probe data available for patient already - skip if so
         pt_probes = (Probes() & f"patient_id = '{pt_id}'").fetch('probe_id')
+        reconstruction_path = Path(f"{PROJECTWORLDS_PATH}/{patient}Datafile/IMG/Reconstructions/")
         if pt_probes.size > 0:
             continue
-        csv_glob = f"{PROJECTWORLDS_PATH}/{patient}_?Datafile/IMG/Reconstructions/{patient}*electrodes_v2025+.csv"
-        path_match = glob(csv_glob)
+        csv_glob = f"{patient}*electrodes*.csv"
+        path_match = glob(csv_glob, root_dir=reconstruction_path)
         if len(path_match) == 0:
             print("skipping patient", patient, "- no electrode file found")
             continue
-        csv_path = path_match[0]
+        elif len(path_match) > 1:
+            # Get the most recent version, by alpha-numeric sort where v2026 > v2025+ > v2025
+            chosen = sorted(path_match)[-1]
+            csv_path = reconstruction_path / chosen
+            print(f'Found multiple electrode files, using {chosen}')
+        else:
+            csv_path = reconstruction_path / path_match[0]
+
         electrode_df = pd.read_csv(csv_path)
         # remove micro rows
         electrode_df = electrode_df[electrode_df['Type'] != 'microwires']
 
         # also get montage df
-        montage_file = f"{DATALAKE_PATH}/{patient}Datafile/INFO/{patient}_montage.xlsx"
+        montage_file = reconstruction_path / f"{patient}_montage.xlsx"
         montage_df = pd.read_excel(montage_file, sheet_name='Sheet2')
         
         # get unique probes to insert
